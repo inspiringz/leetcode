@@ -19,12 +19,21 @@
 - Code 
 
 ```python
+# sort
 class Solution:
     def findRepeatNumber(self, nums: List[int]) -> int:
         nums.sort()
         for i in range(len(nums)):
             if nums[i] == nums[i + 1]:
                 return nums[i]
+# set
+class Solution:
+    def findRepeatNumber(self, nums: List[int]) -> int:
+        tmp = set()
+        for i in nums:
+            if i in tmp:
+                return i
+            tmp.add(i)
 ```
 
 
