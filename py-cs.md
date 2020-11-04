@@ -13,7 +13,7 @@
 
 ### Python 数据模型
 
-（1）一摞有序的纸牌：
+#### 一摞有序的纸牌
 
 ```python
 import collections
@@ -41,7 +41,7 @@ def spades_high(card):
 
 ```
 
-（2）如何使用特殊方法：
+#### 如何使用特殊方法
 
 ```python
 from math import hypot
@@ -70,9 +70,9 @@ class Vector:
 ```
 
 
-（3）特殊方法一览：
+#### 特殊方法一览
 
-\>\>\> [Python 语言参考 - 数据模型](https://docs.python.org/zh-cn/3/reference/datamodel.html#)
+> [Python 语言参考 - 数据模型](https://docs.python.org/zh-cn/3/reference/datamodel.html#)
 
 跟运算符无关的特殊方法：
 
@@ -104,7 +104,41 @@ class Vector:
 
 ### 序列构成的数组
 
+#### 内置序列类型概览
+
+- 容器序列：list、tuple 和 collections.deque 这些序列能存放不同类型的数据。
+
+- 扁平序列：str、bytes、bytearray、memoryview 和 array.array，这类序列只能容纳一种类型。
+
+- 可变序列：list、bytearray、array.array、collections.deque 和 memoryview。
+
+- 不可变序列：tuple、str 和 bytes。
 
 ![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/MutableSequence.png)
+
+#### 列表推导和生成器表达式
+
+虽然也可以用列表推导来初始化元组、数组或其他序列类型，但是生成器表达式是更好的选择。这是因为生成器表达式背后遵守了迭代器协议，可以逐个地产出元素，而不是先建立一个完整的列表，然后再把这个列表传递到某个构造函数里。这种方式显然能够节省内存。
+
+
+```python
+>>> symbols = '$¢£¥€¤'
+>>> beyond_ascii = [ord(s) for s in symbols if ord(s) > 127] # 列表推导
+>>> beyond_ascii
+[162, 163, 165, 8364, 164]
+>>> beyond_ascii = list(filter(lambda c: c > 127, map(ord, symbols))) # filter map
+>>> beyond_ascii
+[162, 163, 165, 8364, 164]
+>>> tuple(ord(symbol) for symbol in symbols) # 生成器表达式
+(36, 162, 163, 165, 8364, 164)
+>>> import array
+>>> array.array('I', (ord(symbol) for symbol in symbols)) 
+array('I', [36, 162, 163, 165, 8364, 164])
+```
+
+#### 元组不仅仅是不可变的列表
+
+元组其实是对数据的记录：元组中的每个元素都存放了记录中一个字段的数据，外加这个字段的位置。正是这个位置信息给数据赋予了意义。
+
 
 
