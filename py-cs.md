@@ -11,7 +11,7 @@
 
 ## Fluent Python
 
-### Python 数据模型
+### 1. Python 数据模型
 
 #### 一摞有序的纸牌
 
@@ -241,7 +241,7 @@ City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
 |s.\_\_setitem\_\_(p, e)|√||s[p] = e，把元素 e 放在位置p，替代已经在那个位置的元素|
 |s.sort(\[key\],\[reverse\])|√||就地对 s 中的元素进行排序，可选的参数有键（key）和是否倒序（reverse）|
 
-### 切片
+### 2. 切片
 
 
 在切片和区间操作里不包含区间范围的最后一个元素是 Python 的风格，这个习惯符合Python、C 和其他语言里以 0 作为起始下标的传统。
@@ -526,4 +526,4 @@ JoinableQueue，这些类受到 queue 和 multiprocessing 模块的影响，但�
     跟上面三个模块不同的是，heapq 没有队列类，而是提供了 heappush 和 heappop方法，让用户可以把可变序列当作堆队列或者优先队列来使用。
 
 
-### 字典和集合
+### 3. 字典和集合
