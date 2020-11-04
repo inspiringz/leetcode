@@ -105,6 +105,6 @@ class Vector:
 ### 序列构成的数组
 
 
-![](https://github.com/inspiringz/leetcode/blob/master/image/MutableSequence.png)
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/MutableSequence.png)
 
 
