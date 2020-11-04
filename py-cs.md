@@ -140,5 +140,105 @@ array('I', [36, 162, 163, 165, 8364, 164])
 
 元组其实是对数据的记录：元组中的每个元素都存放了记录中一个字段的数据，外加这个字段的位置。正是这个位置信息给数据赋予了意义。
 
+```python
+lax_coordinates = (33.9425, -118.408056)
+latitude, longitude = lax_coordinates # 元组拆包
+t = (20, 8) # * 运算符把一个可迭代对象拆开作为函数的参数
+quotient, remainder = divmod(*t) # (2, 4)
+```
 
+在元组拆包中使用 `*` 也可以帮助我们把注意力集中在元组的部分元素上：
+
+```py
+>>> a, *body, c, d = range(5)
+>>> a, body, c, d
+(0, [1, 2], 3, 4)
+>>> *head, b, c, d = range(5)
+>>> head, b, c, d
+([0, 1], 2, 3, 4)
+```
+
+嵌套元组拆包：
+
+```py
+metro_areas = [
+ ('Tokyo','JP',36.933,(35.689722,139.691667)),
+ ('Delhi NCR', 'IN', 21.935, (28.613889, 77.208889)),
+ ('Mexico City', 'MX', 20.142, (19.433333, -99.133333)),
+ ('New York-Newark', 'US', 20.104, (40.808611, -74.020386)),
+ ('Sao Paulo', 'BR', 19.649, (-23.547778, -46.635833)),
+]
+print('{:15} | {:^9} | {:^9}'.format('', 'lat.', 'long.'))
+fmt = '{:15} | {:9.4f} | {:9.4f}'
+for name, cc, pop, (latitude, longitude) in metro_areas:
+    if longitude <= 0:
+    print(fmt.format(name, latitude, longitude))
+''' output '''
+                | lat.     | long.
+Mexico City     | 19.4333  | -99.1333
+New York-Newark | 40.8086  | -74.0204
+Sao Paul        | -23.5478 | -46.6358
+```
+
+#### 具名元组
+
+`collections.namedtuple` 是一个工厂函数，它可以用来构建一个带字段名的元组和一个有名字的类——这个带名字的类对调试程序有很大帮助。
+
+创建一个具名元组需要两个参数，一个是类名，另一个是类的各个字段的名字。后者可以是由数个字符串组成的可迭代对象，或者是由空格分隔开的字段名组成的字符串。
+
+```py
+>>> from collections import namedtuple
+>>> City = namedtuple('City', 'name country population coordinates')
+>>> tokyo = City('Tokyo', 'JP', 36.933, (35.689722, 139.691667))
+>>> tokyo
+City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
+139.691667))
+>>> tokyo.population
+36.933
+>>> tokyo.coordinates
+(35.689722, 139.691667)
+>>> tokyo[1]
+'JP'
+```
+
+除了从普通元组那里继承来的属性之外，具名元组还有一些自己专有的属性:
+
+- `_fields` 属性是一个包含这个类所有字段名称的元组。
+- 用 `_make()` 通过接受一个可迭代对象来生成这个类的一个实例，它的作用跟 City(*delhi_data) 是一样的。
+- `_asdict()` 把具名元组以 collections.OrderedDict 的形式返回，我们可以利用它来把元组里的信息友好地呈现出来。
+
+####　作为不可变列表的元组
+
+除了跟增减元素相关的方法之外，元组支持列表的其他所有方法。还有一个例外，元组没有 `__reversed__` 方法，但是这个方法只是个优化而已，reversed(my_tuple) 这个用法在没有 `__reversed__` 的情况下也是合法的。
+
+列表或元组的方法和属性：
+
+| | 列表 | 元组 ||
+|:-:|:--:|:----:|:----:|
+|s.\_\_add\_\_(s2)|√|√|s + s2，拼接|
+|s.\_\_iadd\_\_(s2)|√||s += s2，就地拼接|
+|s.append(e)|√||在尾部添加一个新元素|
+|s.clear()|√||删除所有元素|
+|s.\_\_contains\_\_(e)|√|√|s 是否包含 e|
+|s.copy()|√||列表的浅复制|
+|s.count(e)|√|√| e 在 s 中出现的次数|
+|s.\_\_delitem\_\_(p)|√||把位于 p 的元素删除|
+|s.extend(it)|√||把可迭代对象 it 追加给 s|
+|s.\_\_getitem\_\_(p) |√|√| s\[p\]，获取位置 p 的元素|
+|s.\_\_getnewargs\_\_()|√|| 在 pickle 中支持更加优化的序列化|
+|s.index(e) |√|√| 在 s 中找到元素 e 第一次出现的位置|
+|s.insert(p, e)|√||在位置 p 之前插入元素e|
+|s.\_\_iter\_\_() |√|√| 获取 s 的迭代器|
+|s.\_\_len\_\_() |√|√| len(s)，元素的数量|
+|s.\_\_mul\_\_(n) |√|√| s * n，n 个 s 的重复拼接|
+|s.\_\_imul\_\_(n)|√||s *= n，就地重复拼接|
+|s.\_\_rmul\_\_(n) |√|√| n * s，反向拼接 *|
+|s.pop([p])|√||删除最后或者是（可选的）位于 p 的元素，并返回它的值|
+|s.remove(e)|√||删除 s 中的第一次出现的 e|
+|s.reverse()|√||就地把 s 的元素倒序排列|
+|s.\_\_reversed\_\_()|√||返回 s 的倒序迭代器|
+|s.\_\_setitem\_\_(p, e)|√||s[p] = e，把元素 e 放在位置p，替代已经在那个位置的元素|
+|s.sort(\[key\],\[reverse\])|√||就地对 s 中的元素进行排序，可选的参数有键（key）和是否倒序（reverse）|
+
+### 切片
 
