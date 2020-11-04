@@ -13,7 +13,7 @@
 
 ### 1. Python 数据模型
 
-#### 一摞有序的纸牌
+#### 1.1 一摞有序的纸牌
 
 ```python
 import collections
@@ -41,7 +41,7 @@ def spades_high(card):
 
 ```
 
-#### 如何使用特殊方法
+#### 1.2 如何使用特殊方法
 
 ```python
 from math import hypot
@@ -70,7 +70,7 @@ class Vector:
 ```
 
 
-#### 特殊方法一览
+#### 1.3 特殊方法一览
 
 > [Python 语言参考 - 数据模型](https://docs.python.org/zh-cn/3/reference/datamodel.html#)
 
@@ -102,9 +102,9 @@ class Vector:
 |反向位运算符| \_\_rlshift\_\_、\_\_rrshift\_\_、\_\_rand\_\_、\_\_rxor\_\_、\_\_ror\_\_|
 |增量赋值位运算符|\_\_ilshift\_\_、\_\_irshift\_\_、\_\_iand\_\_、\_\_ixor\_\_、\_\_ior\_\_|
 
-### 序列构成的数组
+### 2. 序列构成的数组
 
-#### 内置序列类型概览
+#### 2.1 内置序列类型概览
 
 - 容器序列：list、tuple 和 collections.deque 这些序列能存放不同类型的数据。
 
@@ -116,7 +116,7 @@ class Vector:
 
 ![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/MutableSequence.png)
 
-#### 列表推导和生成器表达式
+#### 2.2 列表推导和生成器表达式
 
 虽然也可以用列表推导来初始化元组、数组或其他序列类型，但是生成器表达式是更好的选择。这是因为生成器表达式背后遵守了迭代器协议，可以逐个地产出元素，而不是先建立一个完整的列表，然后再把这个列表传递到某个构造函数里。这种方式显然能够节省内存。
 
@@ -136,7 +136,7 @@ class Vector:
 array('I', [36, 162, 163, 165, 8364, 164])
 ```
 
-#### 元组不仅仅是不可变的列表
+#### 2.3 元组不仅仅是不可变的列表
 
 元组其实是对数据的记录：元组中的每个元素都存放了记录中一个字段的数据，外加这个字段的位置。正是这个位置信息给数据赋予了意义。
 
@@ -181,7 +181,7 @@ New York-Newark | 40.8086  | -74.0204
 Sao Paul        | -23.5478 | -46.6358
 ```
 
-#### 具名元组
+#### 2.4 具名元组
 
 `collections.namedtuple` 是一个工厂函数，它可以用来构建一个带字段名的元组和一个有名字的类——这个带名字的类对调试程序有很大帮助。
 
@@ -208,7 +208,7 @@ City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
 - 用 `_make()` 通过接受一个可迭代对象来生成这个类的一个实例，它的作用跟 City(*delhi_data) 是一样的。
 - `_asdict()` 把具名元组以 collections.OrderedDict 的形式返回，我们可以利用它来把元组里的信息友好地呈现出来。
 
-#### 作为不可变列表的元组
+#### 2.5 作为不可变列表的元组
 
 除了跟增减元素相关的方法之外，元组支持列表的其他所有方法。还有一个例外，元组没有 `__reversed__` 方法，但是这个方法只是个优化而已，reversed(my_tuple) 这个用法在没有 `__reversed__` 的情况下也是合法的。
 
@@ -241,7 +241,7 @@ City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
 |s.\_\_setitem\_\_(p, e)|√||s[p] = e，把元素 e 放在位置p，替代已经在那个位置的元素|
 |s.sort(\[key\],\[reverse\])|√||就地对 s 中的元素进行排序，可选的参数有键（key）和是否倒序（reverse）|
 
-### 2. 切片
+#### 2.6 切片
 
 
 在切片和区间操作里不包含区间范围的最后一个元素是 Python 的风格，这个习惯符合Python、C 和其他语言里以 0 作为起始下标的传统。
@@ -267,7 +267,7 @@ City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
 
 - Python Tutor（[http://www.pythontutor.com](http://www.pythontutor.com)）是一个对 Python 运行原理进行可视化分析的工具。
 
-#### list.sort 方法和内置函数 sorted
+#### 2.7 list.sort 方法和内置函数 sorted
 
 list.sort 方法会就地排序列表，也就是说不会把原列表复制一份。这也是这个方法的返回值是 None 的原因，提醒你本方法不会新建一个列表。在这种情况下返回 None 其实
 是 Python 的一个惯例：如果一个函数或者方法对对象进行的是就地改动，那它就应该返回 None，好让调用者知道传入的参数发生了变动，而且并未产生新的对象。例如，random.shuffle 函数也遵守了这个惯例。
@@ -284,7 +284,7 @@ list.sort 方法会就地排序列表，也就是说不会把原列表复制一�
 
     一个只有一个参数的函数，这个函数会被用在序列里的每一个元素上，所产生的结果将是排序算法依赖的对比关键字。比如说，在对一些字符串排序时，可以用 key=str.lower 来实现忽略大小写的排序，或者是用 key=len 进行基于字符串长度的排序。这个参数的默认值是恒等函数（identity function），也就是默认用元素自己的值来排序。
 
-#### 用 bisect 来管理已排序的序列
+#### 2.8 用 bisect 来管理已排序的序列
 
 [bisect 模块](https://docs.python.org/zh-cn/3/library/bisect.html)包含两个主要函数，`bisect` 和 `insort`，两个函数都利用二分查找算法来在有序序列中查找或插入元素。
 
@@ -370,9 +370,9 @@ for i in range(SIZE):
 10 -> [0, 2, 6, 7, 8, 10, 10]
 ```
 
-#### 当列表不是首选时
+#### 2.9 当列表不是首选时
 
-##### 数组
+##### 2.9.1 数组
 
 如果我们需要一个只包含数字的列表，那么 array.array 比 list 更高效。数组支持所有跟可变序列有关的操作，包括 `.pop`、`.insert` 和 `.extend`。另外，数组还提供从文件读取和存入文件的更快的方法，如 `.frombytes` 和 `.tofile`。
 
@@ -442,7 +442,7 @@ a = array.array(a.typecode, sorted(a))
 
 想要在不打乱次序的情况下为数组添加新的元素，bisect.insort 还是能派上用场。
 
-##### 双向队列和其他形式的队列
+##### 2.9.2 双向队列和其他形式的队列
 
 利用 `.append` 和 `.pop` 方法，我们可以把列表当作栈或者队列来用（比如，把 `.append` 和 `.pop(0)` 合起来用，就能模拟栈的 “先进先出” 的特点）。但是删除列表的第一个元素（亦或是在第一个元素之前添加一个元素）之类的操作是很耗时的，因为这些操作会牵扯到移动列表里的所有元素。
 
