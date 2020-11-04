@@ -173,7 +173,8 @@ fmt = '{:15} | {:9.4f} | {:9.4f}'
 for name, cc, pop, (latitude, longitude) in metro_areas:
     if longitude <= 0:
     print(fmt.format(name, latitude, longitude))
-''' output '''
+```
+```
                 | lat.     | long.
 Mexico City     | 19.4333  | -99.1333
 New York-Newark | 40.8086  | -74.0204
@@ -207,7 +208,7 @@ City(name='Tokyo', country='JP', population=36.933, coordinates=(35.689722,
 - 用 `_make()` 通过接受一个可迭代对象来生成这个类的一个实例，它的作用跟 City(*delhi_data) 是一样的。
 - `_asdict()` 把具名元组以 collections.OrderedDict 的形式返回，我们可以利用它来把元组里的信息友好地呈现出来。
 
-####　作为不可变列表的元组
+#### 作为不可变列表的元组
 
 除了跟增减元素相关的方法之外，元组支持列表的其他所有方法。还有一个例外，元组没有 `__reversed__` 方法，但是这个方法只是个优化而已，reversed(my_tuple) 这个用法在没有 `__reversed__` 的情况下也是合法的。
 
