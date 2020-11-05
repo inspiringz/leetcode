@@ -686,7 +686,7 @@ def __contains__(self, key): # key not -> str(key)
     pylookup = ChainMap(locals(), globals(), vars(builtins))
     ```
 
-- collections.Counter[https://docs.python.org/3/library/collections.html#collections.Counter]
+- collections.[Counter](https://docs.python.org/3/library/collections.html#collections.Counter)
 
     这个映射类型会给键准备一个整数计数器。每次更新一个键的时候都会增加这个计数器。所以这个类型可以用来给可散列表对象计数，或者是当成多重集来用——多重集合就是集合里的元素可以出现不止一次。Counter 实现了 + 和 - 运算符用来合并记录，还有像 most_common(\[n\]) 这类很有用的方法。most_common(\[n\]) 会按照次序返回映射里最常见的 n 个键和它们的计数。
 
@@ -737,4 +737,97 @@ class StrKeyDict(collections.UserDict):
 - Mapping.get
 
     在 StrKeyDict0 中，我们不得不改写 get 方法，好让它的表现跟 \_\_getitem\_\_ 一致。而在上面的示例中就没这个必要了，因为它继承了 Mapping.get 方法，而 [Python 的源码](https://hg.python.org/cpython/file/3.4/Lib/_collections_abc.py#l422) 显示，这个方法的实现方式跟 StrKeyDict0.get 是一模一样的。
+
+#### 3.7 不可变映射序列
+
+从 Python 3.3 开始，types 模块中引入了一个封装类名叫 MappingProxyType。如果给这个类一个映射，它会返回一个只读的映射视图。
+
+```py
+>>> from types import MappingProxyType
+>>> d = {1:'A'}
+>>> d_proxy = MappingProxyType(d)
+>>> d_proxy
+mappingproxy({1: 'A'})
+>>> d_proxy[1]
+'A'
+>>> d_proxy[2] = 'x' # 只读
+Traceback (most recent call last):
+ File "<stdin>", line 1, in <module>
+TypeError: 'mappingproxy' object does not support item assignment
+>>> d[2] = 'B' # 可修改
+>>> d_proxy 
+mappingproxy({1: 'A', 2: 'B'})
+>>> d_proxy[2]
+'B'
+```
+
+#### 3.8 集合论
+
+集合中的元素必须是可散列的，set 类型本身是不可散列的，但是 frozenset 可以。因此可以创建一个包含不同 frozenset 的 set。
+
+除了保证唯一性，集合还实现了很多基础的中缀运算符。给定两个集合 a 和 b，a | b 返回的是它们的**合集**，a & b 得到的是**交集**，而 a - b 得到的是**差集**。合理地利用这些操作，不仅能够让代码的行数变少，还能减少 Python 程序的运行时间。这样做同时也是为了让代码更易读，从而更容易判断程序的正确性，因为利用这些运算符可以省去不必要的循环和逻辑操作。
+
+```py
+found = len(set(needles) & set(haystack))
+found = len(set(needles).intersection(haystack))
+```
+
+#### 3.8.1 集合字面量
+
+```py
+>>> s = {1}
+>>> type(s)
+<class 'set'>
+>>> s
+{1}
+>>> s.pop()
+1
+>>> s
+set()
+```
+
+```py
+>>> frozenset(range(10))
+frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+```
+
+##### 3.8.2 集合推导
+
+```py
+>>> from unicodedata import name
+>>> {chr(i) for i in range(32, 256) if 'SIGN' in name(chr(i), '')}
+{'§', '=', '¢', '#', '¤', '<', '¥', 'μ', '×', '$', '¶', '£', '©', '°', '+', '÷', '±', '>', '¬', '®', '%'}
+```
+
+#### 3.8.3 集合的操作
+
+集合的数学运算：
+
+|数学符号|Python运算符|方法|描述|
+|:-:|:-:|:-:|:-:|
+|S ∩ Z|s & z |s.\_\_and\_\_(z)| s 和 z 的交集|
+|S ∩ Z|z & s|s.\_\_rand\_\_(z)| 反向 & 操作|
+|S ∩ Z|z & s|s.intersection(it, ...)|把可迭代的 it 和其他所有参数转化为集合，然后求它们与 s 的交集|
+|S ∩ Z|s &= z|s.\_\_iand\_\_(z)| 把 s 更新为 s 和 z 的交集|
+|S ∩ Z|s &= z|s.intersection\_update(it, ...) |把可迭代的 it 和其他所有参数转化为集合，然后求得它们与 s 的交集，然后把 s 更新成这个交集|
+|S ∪ Z|s \| z | s.\_\_or\_\_(z) | s 和 z 的并集 |
+|S ∪ Z|z \| s | s.\_\_ror\_\_(z) | \| 的反向操作 |
+|S ∪ Z|z \| s | s.union(it, ...) | 把可迭代的 it 和其他所有参数转化为集合，然后求它们和 s 的并集|
+|S ∪ Z|s \|= z |s.\_\_ior\_\_(z) | 把 s 更新为 s 和 z 的并集 |
+|S ∪ Z|s \|= z |s.update(it, ...) |把可迭代的 it 和其他所有参数转化为集合，然后求它们和 s 的并集，并把 s 更新成这个并集|
+|S \ Z|s - z | s.\_\_sub\_\_(z) | s 和 z 的差集，或者叫作相对补集|
+|S \ Z|z - s|s.\_\_rsub\_\_(z)|- 的反向操作|
+|S \ Z|z - s|s.difference(it, ...)|把可迭代的 it 和其他所有参数转化为集合，然后求它们和 s 的差集|
+|S \ Z|s -= z|s.\_\_isub\_\_(z) |把 s 更新为它与 z 的差集|
+|S \ Z|s -= z|s.difference\_update(it, ...)|把可迭代的 it 和其他所有参数转化为集合，求它们和 s 的差集，然后把 s 更新成这个差集 |
+|S \ Z|s -= z|s.symmetric\_difference(it)|求 s 和 set(it) 的对称差集|
+|S △ Z|s ^ z | s.\_\_xor\_\_(z) |求 s 和 z 的对称差集|
+|S △ Z|z ^ s |s.\_\_rxor\_\_(z) |^ 的反向操作|
+|S △ Z|z ^ s | s.symmetric\_difference\_update(it,...)|把可迭代的 it 和其他所有参数转化为集合，然后求它们和 s 的对称差集，最后把 s 更新成该结果|
+|S △ Z| s ^= z| s.\_\_ixor\_\_(z)|把 s 更新成它与 z 的对称差集|
+
+集合的比较运算符:
+
+|数学符号|Python运算符|方法|描述|
+|:-:|:-:|:-:|:-:|
 
