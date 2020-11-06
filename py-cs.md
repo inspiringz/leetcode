@@ -925,6 +925,35 @@ set 和 frozenset 的实现也依赖散列表，但在它们的散列表里存�
 
 ### 4. 文本和字节序列
 
+#### 处理文本文件
+
+处理文本的最佳实践是“Unicode 三明治”（如图 4-2 所示）。 意思是，要尽早把输入（例如读取文件时）的字节序列解码成字符串。这种三明治中的“肉片”是程序的业务逻辑，在这里只能处理字符串对象。在其他处理过程中，一定不能编码或解码。对输出来说，则要尽量晚地把字符串编码成字节序列。多数 Web 框架都是这样做的，使用框架时很少接触字节序列。例如，在 Django 中，视图应该输出 Unicode 字符串；Django 会负责把响应编码成字节序列，而且默认使用 UTF-8 编码。
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/unicode_s.png)
+
+
+在 Python 3 中能轻松地采纳 Unicode 三明治的建议，因为内置的 open 函数会在读取文件时做必要的解码，以文本模式写入文件时还会做必要的编码，所以调用 my_file.read() 方法得到的以及传给 my_file.write(text) 方法的都是字符串对象。
+
+> 需要在多台设备中或多种场合下运行的代码，一定不能依赖默认编码。打开文
+件时始终应该明确传入 encoding= 参数，因为不同的设备使用的默认编码可能不同，有时隔一天也会发生变化。
+
+- 如果打开文件时没有指定 encoding 参数，默认值由 [locale.getpreferredencoding()](https://docs.python.org/3/library/locale.html#locale.getpreferredencoding) 提供。
+
+- 如果设定了 [PYTHONIOENCODING](https://docs.python.org/3/using/cmdline.html#envvar-PYTHONIOENCODING) 环境变量, sys.stdout/stdin/stderr 的编码使用设定的值；否则，继承自所在的控制台；如果输入 / 输出重定向到文件，则由 locale.getpreferredencoding() 定义。
+
+- Python 在二进制数据和字符串之间转换时，内部使用 sys.getdefaultencoding() 获得的编码；Python 3 很少如此，但仍有发生。这个设置不能修改。
+
+- sys.getfilesystemencoding() 用于编解码文件名（不是文件内容）。把字符串参数作为文件名传给 open() 函数时就会使用它；如果传入的文件名参数是字节序列，那就不经改动直接传给 OS API。
+
+### 5. 一等对象
+
+在 Python 中，函数是一等对象。编程语言理论家把 **一等对象** 定义为满足下述条件的程序实体：
+
+- 在运行时创建
+- 能赋值给变量或数据结构中的元素
+- 能作为参数传给函数
+- 能作为函数的返回结果
+
 
 
 
