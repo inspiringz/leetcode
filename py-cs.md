@@ -954,6 +954,342 @@ set 和 frozenset 的实现也依赖散列表，但在它们的散列表里存�
 - 能作为参数传给函数
 - 能作为函数的返回结果
 
+#### 5.1 高阶函数
+
+接受函数为参数，或者把函数作为结果返回的函数是 **高阶函数（higher-order
+function）**。map 函数就是一例，此外，内置函数 sorted 也是。
+
+```py
+# 根据单词长度给一个列表排序
+>>> fruits = ['strawberry', 'fig', 'apple', 'cherry', 'raspberry', 'banana']
+>>> sorted(fruits, key=len)
+['fig', 'apple', 'cherry', 'banana', 'raspberry', 'strawberry']
+# 根据反向拼写给一个单词列表排序
+>>> def reverse(word):
+... return word[::-1]
+>>> reverse('testing')
+'gnitset'
+>>> sorted(fruits, key=reverse)
+['banana', 'apple', 'fig', 'raspberry', 'strawberry', 'cherry']
+```
+
+列表推导或生成器表达式具有 map 和 filter 两个函数的功能，而且更易于阅读。
+
+```py
+>>> list(map(fact, range(6))) # map
+[1, 1, 2, 6, 24, 120]
+>>> [fact(n) for n in range(6)] # 列表推导
+[1, 1, 2, 6, 24, 120]
+>>> list(map(factorial, filter(lambda n: n % 2, range(6)))) # filter
+[1, 6, 120]
+>>> [factorial(n) for n in range(6) if n % 2] # 列表推导
+[1, 6, 120]
+```
+
+reduce 和 sum:
+
+```py
+>>> from functools import reduce
+>>> from operator import add
+>>> reduce(add, range(100))
+4950
+>>> sum(range(100))
+4950
+```
+
+all 和 any 也是内置的归约函数:
+
+- all(iterable)
+
+    如果 iterable 的每个元素都是真值，返回 True；all([]) 返回 True
+
+- any(iterable)
+
+    只要 iterable 中有元素是真值，就返回 True；any([]) 返回 False。
+
+#### 5.2 匿名函数
+
+lambda 关键字在 Python 表达式内创建匿名函数，在参数列表中最适合使用匿名函数。
+
+```py
+>>> fruits = ['strawberry', 'fig', 'apple', 'cherry', 'raspberry', 'banana']
+>>> sorted(fruits, key=lambda word: word[::-1])
+['banana', 'apple', 'fig', 'raspberry', 'strawberry', 'cherry']
+```
+lambda 句法只是语法糖：与 def 语句一样，lambda 表达式会创建函数对象。这是 Python 中几种可调用对象的一种。
+
+#### 5.3 可调用对象
+
+除了用户定义的函数，调用运算符（即 `()`）还可以应用到其他对象上。如果想判断对象能否调用，可以使用内置的 callable() 函数。Python 数据模型文档列出了 7 种可调用对象。
+
+- 用户定义的函数
+
+    使用 def 语句或 lambda 表达式创建。
+
+- 内置函数
+
+    　使用 C 语言（CPython）实现的函数，如 len 或 time.strftime。
+
+- 内置方法
+
+    使用 C 语言实现的方法，如 dict.get。
+
+- 方法
+
+    在类的定义体中定义的函数。
+
+- 类
+
+    调用类时会运行类的 \_\_new\_\_ 方法创建一个实例，然后运行 \_\_init\_\_ 方法，初始化实例，最后把实例返回给调用方。因为 Python 没有 new 运算符，所以调用类相当于调用函数。
+
+- 类的实例
+
+    如果类定义了 \_\_call\_\_ 方法，那么它的实例可以作为函数调用。
+
+- 生成器函数
+
+    使用 yield 关键字的函数或方法。调用生成器函数返回的是生成器对象。
+
+```py
+>>> abs, str, 13
+(<built-in function abs>, <class 'str'>, 13)
+>>> [callable(obj) for obj in (abs, str, 13)]
+[True, True, False]
+```
+
+#### 5.4 用户定义的可调用类型
+
+```py
+import random
+
+class BingoCage:
+    def __init__(self, items):
+        self._items = list(items)
+        random.shuffle(self._items)
+
+    def pick(self):
+        try:
+            return self._items.pop()
+        except IndexError:
+            raise LookupError('pick from empty BingoCage')
+
+    def __call__(self):
+        return self.pick()
+```
+
+实现 \_\_call\_\_ 方法的类是创建函数类对象的简便方式，此时必须在内部维护一个状态，让它在调用之间可用，例如 BingoCage 中的剩余元素。装饰器就是这样。装饰器必须是函数，而且有时要在多次调用之间“记住”某些事 [ 例如备忘（memoization），即缓存消耗
+大的计算结果，供后面使用 ]。
+
+创建保有内部状态的函数，还有一种截然不同的方式——使用闭包。
+
+#### 5.5 函数内省
+
+除了 \_\_doc\_\_，函数对象还有很多属性。使用 dir 函数可以探知 factorial 具有下述属性：
+
+```py
+>>> dir(factorial)
+['__annotations__', '__call__', '__class__', '__closure__', '__code__',
+'__defaults__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__',
+'__format__', '__ge__', '__get__', '__getattribute__', '__globals__',
+'__gt__', '__hash__', '__init__', '__kwdefaults__', '__le__', '__lt__',
+'__module__', '__name__', '__ne__', '__new__', '__qualname__', '__reduce__',
+'__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__str__',
+'__subclasshook__']
+```
+
+列出常规对象没有而函数有的属性:
+
+```py
+>>> class C: pass
+>>> obj = C()
+>>> def func(): pass
+>>> sorted(set(dir(func)) - set(dir(obj)))
+['__annotations__', '__call__', '__closure__', '__code__', '__defaults__',
+'__get__', '__globals__', '__kwdefaults__', '__name__', '__qualname__']
+```
+
+用户定义的函数的属性:
+
+|名称|类型|说明|
+|:-:|:-:|:-:|
+|\_\_annotations\_\_ | dict | 参数和返回值的注解|
+|\_\_call\_\_ |method-wrapper| 实现 () 运算符；即可调用对象协议|
+|\_\_closure\_\_ |tuple| 函数闭包，即自由变量的绑定（通常是 None）|
+|\_\_code\_\_ |code| 编译成字节码的函数元数据和函数定义体|
+|\_\_defaults\_\_ |tuple| 形式参数的默认值|
+|\_\_get\_\_ |method-wrapper| 实现只读描述符协议（参见第 20 章）|
+|\_\_globals\_\_ |dict| 函数所在模块中的全局变量|
+|\_\_kwdefaults\_\_ |dict| 仅限关键字形式参数的默认值|
+|\_\_name\_\_ |str| 函数名称|
+|\_\_qualname\_\_ |str| 函数的限定名称，如 Random.choice（ 参阅PEP 3155，https://www.python.org/dev/peps/pep-3155/）|
+
+#### 5.6 从定位参数到仅限关键字参数
+
+Python 最好的特性之一是提供了极为灵活的参数处理机制，而且 Python 3 进一步提供了仅限关键字参数（keyword-only argument）。与之密切相关的是，调用函数时使用 **\*** 和 **\*\*** “展开”可迭代对象，映射到单个参数。
+
+```py
+def tag(name, *content, cls=None, **attrs):
+    """生成一个或多个HTML标签"""
+    if cls is not None:
+        attrs['class'] = cls
+    if attrs:
+        attr_str = ''.join(' %s="%s"' % (attr, value) 
+                            for attr, value 
+                            in sorted(attrs.items()))
+    else:
+        attr_str = ''
+    if content:
+        return '\n'.join('<%s%s>%s</%s>' %
+                        (name, attr_str, c, name) for c in content)
+    else:
+        return '<%s%s />' % (name, attr_str)
+```
+
+inspect.signature 函数返回一个 inspect.Signature 对象，它有一
+个 parameters 属性，这是一个有序映射，把参数名和 inspect.Parameter 对象对应起来。各个 Parameter 属性也有自己的属性，例如 name、default 和 kind。特殊的 inspect._empty 值表示没有默认值，考虑到 None 是有效的默认值（也经常这么做），而且这么做是合理的。
+
+inspect.Signature 对象有个 bind 方法，它可以把任意个参数绑定到签名中的形参上，所用的规则与实参到形参的匹配方式一样。框架可以使用这个方法在真正调用函数前验证参数。
+
+```py
+>>> import inspect
+>>> sig = inspect.signature(tag)
+>>> my_tag = {'name': 'img', 'title': 'Sunset Boulevard',
+... 'src': 'sunset.jpg', 'cls': 'framed'}
+>>> bound_args = sig.bind(**my_tag)
+>>> bound_args
+<inspect.BoundArguments object at 0x...>
+>>> for name, value in bound_args.arguments.items()
+... print(name, '=', value)
+...
+name = img
+cls = framed
+attrs = {'title': 'Sunset Boulevard', 'src': 'sunset.jpg'}
+>>> del my_tag['name']
+>>> bound_args = sig.bind(**my_tag) 
+Traceback (most recent call last):
+ ...
+TypeError: 'name' parameter lacking default value
+```
+
+#### 5.7 函数注解
+
+Python 3 提供了一种句法，用于为函数声明中的参数和返回值附加元数据。
+
+```py
+def clip(text:str, max_len:'int > 0'=80) -> str:
+    """在max_len前面或后面的第一个空格处截断文本"""
+    end = None
+    if len(text) > max_len:
+        space_before = text.rfind(' ', 0, max_len)
+        if space_before >= 0:
+            end = space_before
+        else:
+            space_after = text.find(' ', max_len)
+            if space_after >= 0:
+                end = space_after
+    if end is None: # 没找到空格
+        end = len(text)
+    return text[:end].rstrip()
+```
+
+Python 对注解所做的唯一的事情是，把它们存储在函数的 \_\_annotations\_\_ 属性里。仅此而已，Python 不做检查、不做强制、不做验证，什么操作都不做。换句话说，注解对Python 解释器没有任何意义。注解只是元数据，可以供 IDE、框架和装饰器等工具使用。唯有 inspect.signature() 函数知道怎么提取注解。
+
+```py
+>>> from clip_annot import clip
+>>> clip.__annotations__
+{'text': <class 'str'>, 'max_len': 'int > 0', 'return': <class 'str'>}
+>>> from clip_annot import clip
+>>> from inspect import signature
+>>> sig = signature(clip)
+>>> sig.return_annotation
+<class 'str'>
+>>> for param in sig.parameters.values():
+... note = repr(param.annotation).ljust(13)
+... print(note, ':', param.name, '=', param.default)
+<class 'str'> : text = <class 'inspect._empty'>
+'int > 0' : max_len = 80
+```
+
+#### 5.8 支持函数式编程的包
+
+##### 5.8.1 operator 模块
+
+在函数式编程中，经常需要把算术运算符当作函数使用。例如，不使用递归计算阶乘。求和可以使用 sum 函数，但是求积则没有这样的函数。我们可以使用 reduce 函数，但是需要一个函数计算序列中两个元素之积。
+
+使用 reduce 函数和一个匿名函数计算阶乘:
+
+```py
+# 计算阶乘
+from functools import reduce
+def fact(n):
+    return reduce(lambda a, b: a*b, range(1, n+1))
+```
+
+使用 reduce 和 operator.mul 函数计算阶乘:
+
+```py
+from functools import reduce
+from operator import mul
+def fact(n):
+    return reduce(mul, range(1, n+1))
+```
+
+itemgetter 使用 [] 运算符，因此它不仅支持序列，还支持映射和任何实现
+\_\_getitem\_\_ 方法的类。
+
+attrgetter 与 itemgetter 作用类似，它创建的函数根据名称提取对象的属性。如果把多个属性名传给 attrgetter，它也会返回提取的值构成的元组。此外，如果参数名中包含 `.`（点号），attrgetter 会深入嵌套对象，获取指定的属性。
+
+```py
+>>> from collections import namedtuple
+>>> LatLong = namedtuple('LatLong', 'lat long')
+>>> Metropolis = namedtuple('Metropolis', 'name cc pop coord')
+>>> metro_areas = [Metropolis(name, cc, pop, LatLong(lat, long))
+... for name, cc, pop, (lat, long) in metro_data]
+>>> metro_areas[0]
+Metropolis(name='Tokyo', cc='JP', pop=36.933, coord=LatLong(lat=35.689722,
+long=139.691667))
+>>> metro_areas[0].coord.lat
+35.689722
+>>> from operator import attrgetter
+>>> name_lat = attrgetter('name', 'coord.lat')
+>>> for city in sorted(metro_areas, key=attrgetter('coord.lat')):
+... print(name_lat(city))
+('Sao Paulo', -23.547778)
+('Mexico City', 19.433333)
+('Delhi NCR', 28.613889)
+('Tokyo', 35.689722)
+('New York-Newark', 40.808611)
+```
+
+operator 模块中定义的部分函数（省略了以 `_` 开头的名称，因为它们基本上是实现细节）：
+
+```py
+>>> [name for name in dir(operator) if not name.startswith('_')]
+['abs', 'add', 'and_', 'attrgetter', 'concat', 'contains',
+'countOf', 'delitem', 'eq', 'floordiv', 'ge', 'getitem', 'gt',
+'iadd', 'iand', 'iconcat', 'ifloordiv', 'ilshift', 'imod', 'imul',
+'index', 'indexOf', 'inv', 'invert', 'ior', 'ipow', 'irshift',
+'is_', 'is_not', 'isub', 'itemgetter', 'itruediv', 'ixor', 'le',
+'length_hint', 'lshift', 'lt', 'methodcaller', 'mod', 'mul', 'ne',
+'neg', 'not_', 'or_', 'pos', 'pow', 'rshift', 'setitem', 'sub',
+'truediv', 'truth', 'xor']
+```
+
+##### 5.8.2 使用 functools.partial 冻结参数
+
+`functools.partial` 这个高阶函数用于部分应用一个函数。部分应用是指，基`于一个函数创建一个新的可调用对象，把原函数的某些参数固定。使用这个函数可以把接受一个或多个参数的函数改编成需要回调的 API，这样参数更少。
+
+使用 `partial` 把一个两参数函数改编成需要单参数的可调用对象:
+
+```py
+>>> from operator import mul
+>>> from functools import partial
+>>> triple = partial(mul, 3)
+>>> triple(7)
+21
+>>> list(map(triple, range(1, 10)))
+[3, 6, 9, 12, 15, 18, 21, 24, 27]
+```
 
 
 
