@@ -882,7 +882,7 @@ frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 
 ##### 3.9.2 dict 的实现及其导致的结果
 
-1. 键必须是可散列的
+1. 键必须是**可散列**的
 
     一个可散列的对象必须满足以下要求。
     
@@ -1534,7 +1534,359 @@ def target():                 ==>       print('running target()')
 
 严格来说，装饰器只是语法糖。装饰器可以像常规的可调用对象那样调用，其参数是另一个函数。有时，这样做更方便，尤其是做元编程（在运行时改变程序的行为）时。
 
-综上，装饰器的一大特性是，能把被装饰的函数替换成其他函数。第二个特性是，装饰器在加载模块时立即执行。
+综上，装饰器的一大特性是，**能把被装饰的函数替换成其他函数**。第二个特性是，**装饰器在加载模块时立即执行**（在被装饰的函数定义之后立即运行。这通常是在导入时，即 Python 加载模块时）。
 
+#### 7.2 使用装饰器改进“策略”模式
 
+```py
+promos = []
+
+def promotion(promo_func):
+    promos.append(promo_func)
+    return promo_func
+
+@promotion
+def fidelity(order):
+    """为积分为1000或以上的顾客提供5%折扣"""
+    return order.total() * .05 if order.customer.fidelity >= 1000 else 0
+
+@promotion
+def bulk_item(order):
+    """单个商品为20个或以上时提供10%折扣"""
+    discount = 0
+    for item in order.cart:
+        if item.quantity >= 20:
+            discount += item.total() * .1
+    return discount
+
+@promotion
+def large_order(order):
+    """订单中的不同商品达到10个或以上时提供7%折扣"""
+    distinct_items = {item.product for item in order.cart}
+    if len(distinct_items) >= 10:
+        return order.total() * .07
+    return 0
+
+def best_promo(order):
+    """选择可用的最佳折扣"""
+    return max(promo(order) for promo in promos)
+```
+
+#### 7.3 变量作用域规则
+
+Python 不要求声明变量，但是假定在函数定义体中赋值的变量是局部变量。如果在函数中赋值时想让解释器将其当成全局变量，要使用 `global` 声明。
+
+#### 7.4 闭包
+
+**闭包指延伸了作用域的函数，其中包含函数定义体中引用、但是不在定义体中定义的非全局变量。**
+
+```py
+def make_averager():
+    series = []
+    
+    def averager(new_value):
+        series.append(new_value)
+        total = sum(series)
+        return total/len(series)
+    
+    return averager
+```
+
+```py
+>>> avg = make_averager()
+>>> avg(10)
+10.0
+>>> avg(11)
+10.5
+>>> avg(12)
+11.0
+```
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/averager.png)
+
+在 averager 函数中，series 是自由变量（free variable）。审查返回的 averager 对象，我们发现 Python 在 \_\_code\_\_ 属性（表示编译后的函数定义
+体）中保存局部变量和自由变量的名称:
+
+```py
+>>> avg.__code__.co_varnames
+('new_value', 'total')
+>>> avg.__code__.co_freevars
+('series',)
+```
+
+series 的绑定在返回的 avg 函数的 \_\_closure\_\_ 属性中。avg.\_\_closure\_\_ 中的各个元素对应于 avg.\_\_code\_\_.co_freevars 中的一个名称。这些元素是 cell 对象，有个 cell_contents 属性，保存着真正的值。
+
+```py
+>>> avg.__code__.co_freevars
+('series',)
+>>> avg.__closure__
+(<cell at 0x107a44f78: list object at 0x107a91a48>,)
+>>> avg.__closure__[0].cell_contents
+[10, 11, 12]
+```
+
+综上，闭包是一种函数，它会保留定义函数时存在的自由变量的绑定，这样调用函数时，
+虽然定义作用域不可用了，但是仍能使用那些绑定。
+
+注意，只有嵌套在其他函数中的函数才可能需要处理不在全局作用域中的外部变量。
+
+#### 7.5 nonlocal 声明
+
+对数字、字符串、元组等不可变类型来说，只能读取，不能更新。如果尝试重新绑
+定，例如 count = count + 1，其实会隐式创建局部变量 count。这样，count 就不是
+自由变量了，因此不会保存在闭包中。
+
+为了解决这个问题，Python 3 引入了 `nonlocal` 声明。它的作用是把变量标记为自由变量，即使在函数中为变量赋予新值了，也会变成自由变量。如果为 nonlocal 声明的变量赋予新值，闭包中保存的绑定会更新。
+
+```py
+def make_averager():
+    count = 0
+    total = 0
+
+    def averager(new_value):
+        nonlocal count, total
+        count += 1
+        total += new_value
+        return total / count
+
+    return averager
+```
+
+#### 7.6 实现一个简单的装饰器
+
+```py
+import time
+
+def clock(func):
+    def clocked(*args): # 定义内部函数 clocked，它接受任意个定位参数。
+        t0 = time.perf_counter()
+        result = func(*args) # clocked 的闭包中包含自由变量 func。
+        elapsed = time.perf_counter() - t0
+        name = func.__name__
+        arg_str = ', '.join(repr(arg) for arg in args)
+        print('[%0.8fs] %s(%s) -> %r' % (elapsed, name, arg_str, result))
+        return result
+    return clocked #返回内部函数，取代被装饰的函数。
+```
+
+```py
+# clockdeco_demo.py
+import time
+from clockdeco import clock
+
+@clock
+def snooze(seconds):
+    time.sleep(seconds)
+
+@clock
+def factorial(n):
+    return 1 if n < 2 else n*factorial(n-1)
+
+if __name__=='__main__':
+    print('*' * 40, 'Calling snooze(.123)')
+    snooze(.123)
+    print('*' * 40, 'Calling factorial(6)')
+    print('6! =', factorial(6))
+```
+
+```py
+$ python3 clockdeco_demo.py
+**************************************** Calling snooze(123)
+[0.12405610s] snooze(.123) -> None
+**************************************** Calling factorial(6)
+[0.00000191s] factorial(1) -> 1
+[0.00004911s] factorial(2) -> 2
+[0.00008488s] factorial(3) -> 6
+[0.00013208s] factorial(4) -> 24
+[0.00019193s] factorial(5) -> 120
+[0.00026107s] factorial(6) -> 720
+6! = 72
+```
+
+这是装饰器的典型行为：把被装饰的函数替换成新函数，二者接受相同的参数，而且（通常）返回被装饰的函数本该返回的值，同时还会做些额外操作。
+
+上面实现的 clock 装饰器有几个缺点：不支持关键字参数，而且遮盖了被装饰函
+数的 \_\_name__ 和 \_\_doc\_\_ 属性。下面使用 `functools.wraps` 装饰器把相关的属性从 func 复制到 clocked 中。此外，这个新版还能正确处理关键字参数。
+
+```py
+# clockdeco2.py
+import time
+import functools
+
+def clock(func):
+    @functools.wraps(func)
+    def clocked(*args, **kwargs):
+        t0 = time.time()
+        result = func(*args, **kwargs)
+        elapsed = time.time() - t0
+        name = func.__name__
+        arg_lst = []
+        if args:
+            arg_lst.append(', '.join(repr(arg) for arg in args))
+        if kwargs:
+            pairs = ['%s=%r' % (k, w) for k, w in sorted(kwargs.items())]
+            arg_lst.append(', '.join(pairs))
+        arg_str = ', '.join(arg_lst)
+        print('[%0.8fs] %s(%s) -> %r ' % (elapsed, name, arg_str, result))
+        return result
+    return clocked
+```
+
+#### 7.7 标准库中的装饰器
+
+Python 内置了三个用于装饰方法的函数：property、classmethod 和 staticmethod。另一个常见的装饰器是 functools.wraps，它的作用是协助构建行为良好的装饰器。标准库中最值得关注的两个装饰器是 `lru_cache` 和全新的
+`singledispatch`（Python 3.4 新增）。这两个装饰器都在 functools 模块中定义。
+
+##### 7.7.1 使用 functools.lru_cache 做备忘
+
+functools.lru_cache 是非常实用的装饰器，它实现了备忘（memoization）功能。这是一项优化技术，它把耗时的函数的结果保存起来，避免传入相同的参数时重复计算。LRU 三个字母是 **Least Recently Used** 的缩写，表明缓存不会无限制增长，一段时间不用的缓存条目会被扔掉。
+
+```py
+import functools
+from clockdeco import clock
+
+@functools.lru_cache()
+@clock
+def fibonacci(n):
+    if n < 2:
+        return n
+    return fibonacci(n-2) + fibonacci(n-1)
+
+if __name__=='__main__':
+    print(fibonacci(6))
+```
+
+```py
+$ python3 fibo_demo_lru.py
+[0.00000119s] fibonacci(0) -> 0
+[0.00000119s] fibonacci(1) -> 1
+[0.00010800s] fibonacci(2) -> 1
+[0.00000787s] fibonacci(3) -> 2
+[0.00016093s] fibonacci(4) -> 3
+[0.00001216s] fibonacci(5) -> 5
+[0.00025296s] fibonacci(6) -> 8
+```
+
+maxsize 参数指定存储多少个调用的结果。缓存满了之后，旧的结果会被扔掉，腾出空
+间。为了得到最佳性能，maxsize 应该设为 2 的幂。typed 参数如果设为 True，把不同参数类型得到的结果分开保存，即把通常认为相等的浮点数和整数参数（如 1 和 1.0）区分开。顺便说一下，因为 lru_cache 使用字典存储结果，而且键根据调用时传入的定位参数和关键字参数创建，所以被 lru_cache 装饰的函数，它的所有参数都必须是可散列的。
+
+```py
+functools.lru_cache(maxsize=128, typed=False)
+```
+
+##### 7.7.2 单分派泛函数
+
+Python 3.4 新增的 `functools.singledispatch` 装饰器可以把整体方案拆分成多个模块，甚至可以为你无法修改的类提供专门的函数。使用 `@singledispatch` 装饰的普通函数会变成泛函数（generic function）：根据第一个参数的类型，以不同方式执行相同操作的一组函数。
+
+singledispatch 创建一个自定义的 htmlize.register 装饰器，把多个函数绑在一起组成一个泛函数:
+
+```py
+from functools import singledispatch
+from collections import abc
+import numbers
+import html
+
+@singledispatch #@singledispatch 标记处理 object 类型的基函数
+def htmlize(obj):
+    content = html.escape(repr(obj))
+    return '<pre>{}</pre>'.format(content)
+
+@htmlize.register(str) #@«base_function».register(«type»)
+def _(text):
+    content = html.escape(text).replace('\n', '<br>\n')
+    return '<p>{0}</p>'.format(content)
+
+@htmlize.register(numbers.Integral)
+def _(n):
+    return '<pre>{0} (0x{0:x})</pre>'.format(n)
+
+@htmlize.register(tuple) #可以叠放多个 register 装饰器，让同一个函数支持不同类型
+@htmlize.register(abc.MutableSequence) 
+def _(seq):
+    inner = '</li>\n<li>'.join(htmlize(item) for item in seq)
+    return '<ul>\n<li>' + inner + '</li>\n</ul>'
+```
+
+只要可能，注册的专门函数应该处理抽象基类（如 numbers.Integral 和 abc.MutableSequence），不要处理具体实现（如 int 和 list）。这样，代码支持的兼容类型更广泛。例如，Python 扩展可以子类化 numbers.Integral，使用固定的位数实现 int 类型。
+
+singledispatch 机制的一个显著特征是，你可以在系统的任何地方和任何模块中注册专门函数。如果后来在新的模块中定义了新的类型，可以轻松地添加一个新的专门函数来处理那个类型。此外，你还可以为不是自己编写的或者不能修改的类添加自定义函数。
+
+#### 7.8 叠放装饰器
+
+```py
+@d1
+@d2
+def f():
+    print('f')
+```
+等价于
+```py
+def f():
+    print('f')
+f = d1(d2(f))
+```
+
+#### 7.9 参数化装饰器
+
+解析源码中的装饰器时，Python 把被装饰的函数作为第一个参数传给装饰器函数。那怎么让装饰器接受其他参数呢？答案是：创建一个装饰器工厂函数，把参数传给它，返回一个装饰器，然后再把它应用到要装饰的函数上。
+
+一个参数化的注册装饰器：
+
+```py
+registry = set()
+
+def register(active=True):
+    def decorate(func):
+        print('running register(active=%s)->decorate(%s)' % (active, func))
+        if active:
+            registry.add(func)
+        else:
+            registry.discard(func)
+        return func
+    return decorate
+
+@register(active=False)
+def f1():
+    print('running f1()')
+
+@register()
+def f2():
+    print('running f2()')
+
+def f3():
+    print('running f3()')
+```
+
+如果不使用 `@` 句法，那就要像常规函数那样使用 register；若想把 f 添加到 registry 中，则装饰 f 函数的句法是 `register()(f)`；不想添加（或把它删除）的话，句法是 `register(active=False)(f)`。
+
+参数化 clock 装饰器：
+
+```py
+import time
+
+DEFAULT_FMT = '[{elapsed:0.8f}s] {name}({args}) -> {result}'
+
+def clock(fmt=DEFAULT_FMT):
+    def decorate(func):
+        def clocked(*_args):
+            t0 = time.time()
+            _result = func(*_args)
+            elapsed = time.time() - t0
+            name = func.__name__
+            args = ', '.join(repr(arg) for arg in _args)
+            result = repr(_result)
+            print(fmt.format(**locals())) # **locals() 是为了在 fmt 中引用 clocked 的局部变量
+            return _result
+        return clocked
+    return decorate
+
+if __name__ == '__main__':
+    @clock()
+    def snooze(seconds):
+        time.sleep(seconds)
+    for i in range(3):
+        snooze(.123)
+```
+
+### 8. 对象引用、可变性和垃圾回收
 
