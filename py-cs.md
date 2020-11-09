@@ -1291,5 +1291,216 @@ operator 模块中定义的部分函数（省略了以 `_` 开头的名称，因
 [3, 6, 9, 12, 15, 18, 21, 24, 27]
 ```
 
+## 6. 使用一等函数实现策略模式
 
+### 6.1　案例分析：重构“策略”模式
+
+#### 6.1.1　经典的“策略”模式
+
+**策略模式：**
+
+定义一系列算法，把它们一一封装起来，并且使它们可以相互替换。本模式使得算法可以独立于使用它的客户而变化。
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/celve.png)
+
+```py
+from abc import ABC, abstractmethod
+from collections import namedtuple
+
+Customer = namedtuple('Customer', 'name fidelity')
+
+class LineItem:
+    def __init__(self, product, quantity, price):
+        self.product = product
+        self.quantity = quantity
+        self.price = price
+    def total(self):
+        return self.price * self.quantity
+
+class Order: # 上下文
+    def __init__(self, customer, cart, promotion=None):
+        self.customer = customer
+        self.cart = list(cart)
+        self.promotion = promotion
+    def total(self):
+        if not hasattr(self, '__total'):
+            self.__total = sum(item.total() for item in self.cart)
+            return self.__total
+    def due(self):
+        if self.promotion is None:
+            discount = 0
+        else:
+            discount = self.promotion.discount(self)
+        return self.total() - discount
+    def __repr__(self):
+        fmt = '<Order total: {:.2f} due: {:.2f}>'
+        return fmt.format(self.total(), self.due())
+
+class Promotion(ABC) : # 策略：抽象基类
+    @abstractmethod
+    def discount(self, order):
+    """返回折扣金额（正值）"""
+
+class FidelityPromo(Promotion): # 第一个具体策略
+    """为积分为1000或以上的顾客提供5%折扣"""
+    def discount(self, order):
+        return order.total() * .05 if order.customer.fidelity >= 1000 else 0
+
+class BulkItemPromo(Promotion): # 第二个具体策略
+    """单个商品为20个或以上时提供10%折扣"""
+    def discount(self, order):
+        discount = 0
+        for item in order.cart:
+            if item.quantity >= 20:
+                discount += item.total() * .1
+        return discount
+
+class LargeOrderPromo(Promotion): # 第三个具体策略
+    """订单中的不同商品达到10个或以上时提供7%折扣"""
+    def discount(self, order):
+        distinct_items = {item.product for item in order.cart}
+        if len(distinct_items) >= 10:
+            return order.total() * .07
+        return 0
+```
+
+```py
+ >>> joe = Customer('John Doe', 0) 
+ >>> ann = Customer('Ann Smith', 1100)
+ >>> cart = [LineItem('banana', 4, .5),
+ ... LineItem('apple', 10, 1.5),
+ ... LineItem('watermellon', 5, 5.0)]
+ >>> Order(joe, cart, FidelityPromo())
+ <Order total: 42.00 due: 42.00>
+ >>> Order(ann, cart, FidelityPromo())
+ <Order total: 42.00 due: 39.90>
+ >>> banana_cart = [LineItem('banana', 30, .5),
+ ... LineItem('apple', 10, 1.5)]
+ >>> Order(joe, banana_cart, BulkItemPromo())
+ <Order total: 30.00 due: 28.50>
+ >>> long_order = [LineItem(str(item_code), 1, 1.0)
+ ... for item_code in range(10)]
+ >>> Order(joe, long_order, LargeOrderPromo())
+ <Order total: 10.00 due: 9.30>
+ >>> Order(joe, cart, LargeOrderPromo())
+ <Order total: 42.00 due: 42.00>
+```
+
+#### 6.1.2　使用函数实现“策略”模式
+
+Order 类和使用函数实现的折扣策略:
+
+```py
+from collections import namedtuple
+
+Customer = namedtuple('Customer', 'name fidelity')
+
+class LineItem:
+    def __init__(self, product, quantity, price):
+        self.product = product
+        self.quantity = quantity
+        self.price = price
+    def total(self):
+        return self.price * self.quantity
+
+class Order: # 上下文
+    def __init__(self, customer, cart, promotion=None):
+        self.customer = customer
+        self.cart = list(cart)
+        self.promotion = promotion
+    def total(self):
+        if not hasattr(self, '__total'):
+            self.__total = sum(item.total() for item in self.cart)
+        return self.__total
+    def due(self):
+        if self.promotion is None:
+            discount = 0
+        else:
+            discount = self.promotion(self)
+        return self.total() - discount
+    def __repr__(self):
+        fmt = '<Order total: {:.2f} due: {:.2f}>'
+        return fmt.format(self.total(), self.due())
+
+def fidelity_promo(order):
+    """为积分为1000或以上的顾客提供5%折扣"""
+    return order.total() * .05 if order.customer.fidelity >= 1000 else 0
+
+def bulk_item_promo(order):
+    """单个商品为20个或以上时提供10%折扣"""
+    discount = 0
+    for item in order.cart:
+        if item.quantity >= 20:
+            discount += item.total() * .1
+    return discount
+
+def large_order_promo(order):
+    """订单中的不同商品达到10个或以上时提供7%折扣"""
+    distinct_items = {item.product for item in order.cart}
+    if len(distinct_items) >= 10:
+        return order.total() * .07
+    return 0
+```
+
+```py
+ >>> joe = Customer('John Doe', 0) 
+ >>> ann = Customer('Ann Smith', 1100)
+ >>> cart = [LineItem('banana', 4, .5),
+ ... LineItem('apple', 10, 1.5),
+ ... LineItem('watermellon', 5, 5.0)]
+ >>> Order(joe, cart, fidelity_promo)
+ <Order total: 42.00 due: 42.00>
+ >>> Order(ann, cart, fidelity_promo)
+ <Order total: 42.00 due: 39.90>
+ >>> banana_cart = [LineItem('banana', 30, .5),
+ ... LineItem('apple', 10, 1.5)]
+ >>> Order(joe, banana_cart, bulk_item_promo)
+ <Order total: 30.00 due: 28.50>
+ >>> long_order = [LineItem(str(item_code), 1, 1.0)
+ ... for item_code in range(10)]
+ >>> Order(joe, long_order, large_order_promo)
+ <Order total: 10.00 due: 9.30>
+ >>> Order(joe, cart, large_order_promo)
+ <Order total: 42.00 due: 42.00>
+```
+
+在复杂的情况下，需要具体策略维护内部状态时，可能需要把“策略”和“享元”模式结合起来。但是，具体策略一般没有内部状态，只是处理上下文中的数据。此时，一定要使用普通的函数，别去编写只有一个方法的类，再去实现另一个类声明的单函数接口。函数比用户定义的类的实例轻量，而且无需使用“享元”模式，因为各个策略函数在 Python 编译模块时只会创建一次。普通的函数也是 **“可共享的对象，可以同时在多个上下文中使用”**。
+
+#### 6.1.3 选择最佳策略：简单的方式
+
+```py
+promos = [fidelity_promo, bulk_item_promo, large_order_promo]
+def best_promo(order):
+    """选择可用的最佳折扣"""
+    return max(promo(order) for promo in promos)
+```
+
+#### 6.1.4　找出模块中的全部策略
+
+- globals()
+
+    返回一个字典，表示当前的全局符号表。这个符号表始终针对当前模块（对函数或方法来说，是指定义它们的模块，而不是调用它们的模块）。
+
+内省模块的全局命名空间，构建 promos 列表:
+
+```py
+promos = [globals()[name] for name in globals()
+                            if name.endswith('_promo')
+                            and name != 'best_promo']
+def best_promo(order):
+    """选择可用的最佳折扣"""
+    return max(promo(order) for promo in promos)
+```
+
+收集所有可用促销的另一种方法是，在一个单独的模块中保存所有策略函数，把 best_promo 排除在外。
+
+```py
+promos = [func for name, func in
+                inspect.getmembers(promotions, inspect.isfunction)]
+def best_promo(order):
+    """选择可用的最佳折扣"""
+    return max(promo(order) for promo in promos)
+```
+
+### 6.2 “命令”模式
 
