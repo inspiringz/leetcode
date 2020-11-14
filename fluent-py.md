@@ -1961,14 +1961,14 @@ class Bus:
 >>> bus2 = copy.copy(bus1)
 >>> bus3 = copy.deepcopy(bus1)
 >>> id(bus1), id(bus2), id(bus3)
-(4301498296, 4301499416, 4301499752) ➊
+(4301498296, 4301499416, 4301499752)
 >>> bus1.drop('Bill')
 >>> bus2.passengers
-['Alice', 'Claire', 'David'] ➋
+['Alice', 'Claire', 'David']
 >>> id(bus1.passengers), id(bus2.passengers), id(bus3.passengers)
-(4302658568, 4302658568, 4302657800) ➌
+(4302658568, 4302658568, 4302657800)
 >>> bus3.passengers
-['Alice', 'Bill', 'Claire', 'David'] ➍
+['Alice', 'Bill', 'Claire', 'David']
 ```
 
 注意，一般来说，深复制不是件简单的事。如果对象有循环引用，那么这个朴素的算法会进入无限循环。deepcopy 函数会记住已经复制的对象，因此能优雅地处理循环引用:
@@ -2236,4 +2236,342 @@ str、bytes 和 frozenset 实例也有这种行为。注意，frozenset 实例�
 在 CPython 中，对象的引用数量归零后，对象会被立即销毁。如果除了循环引用之外没有其他引用，两个对象都会被销毁。某些情况下，可能需要保存对象的引用，但不留存对象本身。例如，有一个类想要记录所有实例。这个需求可以使用弱引用实现，这是一种低层机制，是 weakref 模块中 WeakValueDictionary、WeakKeyDictionary 和 WeakSet 等有用的集合类，以及 finalize 函数的底层支持。
 
 ## 9. 符合 Python 风格的对象
+
+### 9.1 对象的表示形式
+
+- `repr()` 以便于开发者理解的方式返回对象的字符串表示形式。
+
+- `str()` 以便于用户理解的方式返回对象的字符串表示形式。
+
+### 9.2 再谈向量类
+
+Vector2d 实例有多种表示形式：
+
+```py
+from array import array
+import math
+
+class Vector2d:
+    typecode = 'd'
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
+    
+    def __iter__(self): #可迭代对象
+        return (i for i in (self.x, self.y))
+    
+    def __repr__(self):
+        class_name = type(self).__name__
+        return '{}({!r}, {!r})'.format(class_name, *self)
+    
+    def __str__(self):
+        return str(tuple(self))
+    
+    def __bytes__(self):
+        return (bytes([ord(self.typecode)]) + bytes(array(self.typecode, self)))
+    
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
+    
+    def __abs__(self):
+        return math.hypot(self.x, self.y)
+    
+    def __bool__(self):
+    return bool(abs(self))
+```
+
+```py
+>>> v1 = Vector2d(3, 4)
+>>> print(v1.x, v1.y)
+3.0 4.0
+>>> x, y = v1
+>>> x, y
+(3.0, 4.0)
+>>> v1
+Vector2d(3.0, 4.0)
+>>> v1_clone = eval(repr(v1))
+>>> v1 == v1_clone
+True
+>>> print(v1)
+(3.0, 4.0)
+>>> octets = bytes(v1)
+>>> octets
+b'd\\x00\\x00\\x00\\x00\\x00\\x00\\x08@\\x00\\x00\\x00\\x00\\x00\\x00\\x10@'
+>>> abs(v1)
+5.0
+>>> bool(v1), bool(Vector2d(0, 0))
+```
+
+### 9.3 备选构造方法
+
+使用 bytes() 函数生成的二进制表示形式重建 Vector2d 实例：
+
+```py
+@classmethod
+    def frombytes(cls, octets):
+        typecode = chr(octets[0])
+        memv = memoryview(octets[1:]).cast(typecode)
+        return cls(*memv)
+```
+
+### 9.4 classmethod 与 staticmethod
+
+classmethod 定义操作类，而不是操作实例的方法。。classmethod 改变了调用方法的方式，因此类方法的第一个参数是类本身，而不是实例 classmethod 最常见的用途是定义备选构造方法。
+
+staticmethod 装饰器也会改变方法的调用方式，但是第一个参数不是特殊的值。其实，静态方法就是普通的函数，只是碰巧在类的定义体中，而不是在模块层定义。
+
+比较 classmethod 和 staticmethod 的行为:
+
+```py
+>>> class Demo:
+...     @classmethod
+...     def klassmeth(*args):
+...         return args
+...     @staticmethod
+...     def statmeth(*args):
+...         return args
+...
+>>> Demo.klassmeth() # 不管怎样调用 Demo.klassmeth，它的第一个参数始终是 Demo 类。
+(<class '__main__.Demo'>,)
+>>> Demo.klassmeth('spam')
+(<class '__main__.Demo'>, 'spam')
+>>> Demo.statmeth() # Demo.statmeth 的行为与普通的函数相似。
+()
+>>> Demo.statmeth('spam')
+('spam',)
+```
+
+### 9.5 格式化显示
+
+内置的 format() 函数和 str.format() 方法把各个类型的格式化方式委托给相应的 .\_\_format\_\_(format_spec) 方法。[format_spec](https://docs.python.org/3/library/string.html#formatspec) 是格式说明符，它是：
+
+- format(my_obj, format_spec) 的第二个参数，或者
+- str.format() 方法的格式字符串，`{}` 里代换字段中冒号后面的部分
+
+```py
+>>> brl = 1/2.43 # BRL到USD的货币兑换比价
+>>> brl
+0.4115226337448559
+>>> format(brl, '0.4f')
+'0.4115'
+>>> '1 BRL = {rate:0.2f} USD'.format(rate=brl) # ➋
+'1 BRL = 0.41 USD'
+```
+在 Vector2d 类中定义:
+
+```py
+    def __format__(self, fmt_spec=''):
+        components = (format(c, fmt_spec) for c in self)
+        return '({}, {})'.format(*components)
+```
+
+为自定义的格式代码选择字母时，我会避免使用其他类型用过的字母。在 [格式规范微语言](https://docs.python.org/3/library/string.html#formatspec) 中我们看到，整数使用的代码有 `bcdoxXn`，浮点数使用的代码有 `eEfFgGn%`，字符串使用的代码有 `s`。因此，我为极坐标选的代码是 `p`。各个类使用自己的方式解释格式代码，在自定义的格式代码中重复使用代码字母不会出错，但是可能会让用户困惑。
+
+```py
+def angle(self): # 计算角度
+    return math.atan2(self.y, self.x)
+def __format__(self, fmt_spec=''):
+    if fmt_spec.endswith('p'):
+        fmt_spec = fmt_spec[:-1]
+        coords = (abs(self), self.angle())
+        outer_fmt = '<{}, {}>'
+    else:
+        coords = self
+        outer_fmt = '({}, {})'
+    components = (format(c, fmt_spec) for c in coords)
+    return outer_fmt.format(*components)
+```
+
+```py
+>>> format(Vector2d(1, 1), 'p')
+'<1.4142135623730951, 0.7853981633974483>'
+>>> format(Vector2d(1, 1), '.3ep')
+'<1.414e+00, 7.854e-01>'
+>>> format(Vector2d(1, 1), '0.5fp')
+'<1.41421, 0.78540>'
+```
+
+### 9.6 可散列的 Vector2d
+
+属性只读：
+
+```py
+class Vector2d:
+    typecode = 'd'
+    def __init__(self, x, y):
+        self.__x = float(x) # 用两个前导下划线，标记属性为私有，名称改写（name mangling）
+        self.__y = float(y)
+    @property
+    def x(self):
+        return self.__x
+    @property
+    def y(self):
+         return self.__y
+```
+
+实现 \_\_hash\_\_ 方法：
+
+```py
+def __hash__(self):
+    return hash(self.x) ^ hash(self.y)
+```
+
+要想创建可散列的类型，不一定要实现特性，也不一定要保护实例属性。只需正确地实现 `__hash__` 和 `__eq__` 方法即可。但是，实例的散列值绝不应该变化，因此我们借机提到了只读特性。
+
+### 9.7 使用 `__slots__` 类属性节省空间
+
+默认情况下，Python 在各个实例中名为 `__dict__` 的字典里存储实例属性。为了使用底层的散列表提升访问速度，字典会消耗大量内存。如果要处理数百万个属性不多的实例，通过 `__slots__` 类属性，能节省大量内存，方法是让解释器在元组中存储实例属性，而不用字典。
+
+```py
+class Vector2d:
+    __slots__ = ('__x', '__y')
+    typecode = 'd'
+    [...]
+```
+
+在类中定义 `__slots__` 属性的目的是告诉解释器：“这个类中的所有实例属性都在这儿了！”这样，Python 会在各个实例中使用类似元组的结构存储实例变量，从而避免使用消耗内存的 `__dict__` 属性。如果有数百万个实例同时活动，这样做能节省大量内存。
+
+`__slots__` 的问题:
+
+- 每个子类都要定义 `__slots__` 属性，因为解释器会忽略继承的 `__slots__` 属性。
+
+- 实例只能拥有 `__slots__` 中列出的属性，除非把 `__dict__` 加入 `__slots__` 中（这样做就失去了节省内存的功效）。
+
+- 如果不把 `__weakref__` 加入 `__slots__`，实例就不能作为弱引用的目标。
+
+## 10 序列的修改、散列和切片
+
+序列协议：`__len__` + `__getitem__`
+
+迭代协议：`__getitem__`
+
+```py
+from array import array
+import reprlib
+import math
+
+class Vector:
+    
+    typecode = 'd'
+    
+    def __init__(self, components):
+        self._components = array(self.typecode, components)
+    
+    def __iter__(self):
+        return iter(self._components)
+    
+    def __repr__(self):
+        components = reprlib.repr(self._components)
+        components = components[components.find('['):-1]
+        return 'Vector({})'.format(components)
+    
+    def __str__(self):
+        return str(tuple(self))
+    
+    def __bytes__(self):
+        return (bytes([ord(self.typecode)]) + bytes(self._components))
+    
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
+    
+    def __abs__(self):
+        return math.sqrt(sum(x * x for x in self))
+    
+    def __bool__(self):
+        return bool(abs(self))
+    
+    @classmethod
+    def frombytes(cls, octets):
+        typecode = chr(octets[0])
+        memv = memoryview(octets[1:]).cast(typecode)
+        return cls(memv)
+```
+
+### 10.1 能处理切片的 `__getitem__` 方法
+
+```py
+def __len__(self):
+    return len(self._components)
+def __getitem__(self, index):
+    cls = type(self)
+    if isinstance(index, slice):
+        return cls(self._components[index])
+    elif isinstance(index, numbers.Integral):
+        return self._components[index]
+    else:
+        msg = '{cls.__name__} indices must be integers'
+        raise TypeError(msg.format(cls=cls))
+```
+
+### 10.2 动态存取特性
+
+属性查找失败后，解释器会调用 `__getattr__` 方法。简单来说，对 my_obj.x 表达式，Python 会检查 my_obj 实例有没有名为 x 的属性；如果没有，到类（my_obj.\_\_class\_\_）中查找；如果还没有，顺着继承树继续查找。 如果依旧找不到，调用 my_obj 所属类中定义的 `__getattr__` 方法，传入 self 和属性名称的字符串形式。
+
+```py
+shortcut_names = 'xyzt'
+
+def __getattr__(self, name):
+    cls = type(self)
+    if len(name) == 1:
+        pos = cls.shortcut_names.find(name)
+        if 0 <= pos < len(self._components):
+            return self._components[pos]
+    msg = '{.__name__!r} object has no attribute {!r}'
+    raise AttributeError(msg.format(cls, name))
+
+def __setattr__(self, name, value):
+    cls = type(self)
+    if len(name) == 1:
+        if name in cls.shortcut_names:
+            error = 'readonly attribute {attr_name!r}'
+        elif name.islower():
+            error = "can't set attributes 'a' to 'z' in {cls_name!r}"
+        else:
+            error = ''
+    if error:
+        msg = error.format(cls_name=cls.__name__, attr_name=name)
+        raise AttributeError(msg)
+    super().__setattr__(name, value)
+```
+
+### 10.3 散列和快速等值测试
+
+```py
+def __hash__(self):
+    hashes = map(hash, self._components)
+    return functools.reduce(operator.xor, hashes)
+
+def __eq__(self, other):
+    return len(self) == len(other) and all(a == b for a, b in zip(self, other))
+```
+
+### 10.4 格式化
+
+```py
+def angle(self, n):
+    r = math.sqrt(sum(x * x for x in self[n:]))
+    a = math.atan2(r, self[n-1])
+    if (n == len(self) - 1) and (self[-1] < 0):
+        return math.pi * 2 - a
+    else:
+        return a
+
+def angles(self):
+    return (self.angle(n) for n in range(1, len(self)))
+
+def __format__(self, fmt_spec=''):
+    if fmt_spec.endswith('h'): # 超球面坐标
+        fmt_spec = fmt_spec[:-1]
+        coords = itertools.chain([abs(self)], self.angles())
+        outer_fmt = '<{}>' # <r, Φ1, Φ2, Φ3>
+    else:
+        coords = self
+        outer_fmt = '({})'
+    components = (format(c, fmt_spec) for c in coords)
+    return outer_fmt.format(', '.join(components))
+```
+
+## 11 接口：从协议到抽象基类
+
+
 
