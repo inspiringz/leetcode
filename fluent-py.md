@@ -2573,5 +2573,47 @@ def __format__(self, fmt_spec=''):
 
 ## 11 接口：从协议到抽象基类
 
+**鸭子类型**：对象的类型无关紧要，只要实现了特定的协议即可。忽略对象的真正类型，转而关注对象有没有实现所需的方法、签名和语义。
 
+除了抽象基类，每个类都有**接口**：
+
+- 类实现或继承的公开属性（方法或数据属性），包括特殊方法，如 \_\_getitem\_\_ 或 \_\_add\_\_。
+
+- 对象公开方法的子集，让对象在系统中扮演特定的角色。接口是实现特定角色的方法集合。
+
+Python 喜欢序列，鉴于序列协议的重要性，如果没有 \_\_iter\_\_ 和 \_\_contains\_\_ 方法，Python 会调用 \_\_getitem\_\_ 方法，设法让迭代和 in 运算符可用。
+
+猴子补丁：在运行时修改类或模块，而不改动源码。猴子补丁很强大，但是打补丁的代码与要打补丁的程序耦合十分紧密，而且往往要处理隐藏和没有文档的部分。
+
+Python 3.4 在 [collections.abc](https://docs.python.org/3/library/collections.abc.html#collections-abstract-base-classes) 模块中定义了 16 个抽象基类：
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/ABC.png)
+
+
+- Iterable、Container 和 Sized
+
+    各个集合应该继承这三个抽象基类，或者至少实现兼容的协议。Iterable 通过 `__iter__` 方法支持迭代，Container 通过 `__contains__` 方法支持 in 运算符，Sized通过 `__len__` 方法支持 len() 函数。
+
+- Sequence、Mapping 和 Set
+
+    　这三个是主要的不可变集合类型，而且各自都有可变的子类。
+
+- MappingView
+
+    在 Python 3 中，映射方法 .items()、.keys() 和 .values() 返回的对象分别是 ItemsView、KeysView 和 ValuesView 的实例。前两个类还从 Set 类继承了丰富的接口，包含 3.8.3 节所述的全部运算符。
+
+抽象基类的数字塔: [numbers](https://docs.python.org/3/library/numbers.html) 定义的是“数字塔”（即各个抽象基类的层次结构是线性的），其中 Number 是位于最顶端的超类，随后是 Complex 子类，依次往下，最底端是 Integral 类：
+
+- Number
+- Complex
+- Real
+- Rational
+- Integral
+
+```py
+isinstance(x,numbers.Integral) # 判断 int bool(int 子类)
+isinstance(x, numbers.Real) # 判断浮点数 bool、int、float、fractions.Fraction
+```
+
+## 14 可迭代的对象、迭代器和生成器
 
