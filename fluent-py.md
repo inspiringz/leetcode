@@ -3019,5 +3019,291 @@ YKCOWREBBAJ
 
 ## 16 协程
 
+协程可以处于如下四种状态，当前状态可以使用 `inspect.getgeneratorstate(...)` 函数确定。
 
+- `GEN_CREATED` 等待开始执行。
+- `GEN_RUNNING` 解释器正在执行。
+- `GEN_SUSPENDED` 在 yield 表达式处暂停。
+- `GEN_CLOSED` 执行结束。
+
+```py
+>>> def simple_coro2(a):
+... print('-> Started: a =', a)
+... b = yield a
+... print('-> Received: b =', b)
+... c = yield a + b
+... print('-> Received: c =', c)
+...
+>>> my_coro2 = simple_coro2(14)
+>>> from inspect import getgeneratorstate
+>>> getgeneratorstate(my_coro2) # 协程未启动
+'GEN_CREATED'
+>>> next(my_coro2) # prime 预激协程，让协程向前执行到第一个 yield 表达式，准备好作为活跃的协程使用
+-> Started: a = 14 # 向前执行协程到第一个 yield 表达式，打印 -> Started: a = 14 消息
+14 # 然后产出 a 的值，并且暂停，等待为 b 赋值
+>>> getgeneratorstate(my_coro2) # 在 yield 表达式处暂停
+'GEN_SUSPENDED'
+>>> my_coro2.send(28) # 把数字 28 发给暂停的协程；b = 28
+-> Received: b = 28 # 打印 -> Received: b = 28 消息
+42 # 产出 a + b 的值（42），然后协程暂停，等待为 c 赋值。
+>>> my_coro2.send(99) # 把数字 99 发给暂停的协程; c = 99
+-> Received: c = 99 # 打印 -> Received: c = 99 消息
+Traceback (most recent call last): # 协程终止，导致生成器对象抛出 StopIteration 异常
+ File "<stdin>", line 1, in <module>
+StopIteration
+>>> getgeneratorstate(my_coro2) # 协程执行结束
+'GEN_CLOSED'
+```
+
+simple_coro2 协程的执行过程分为 3 个阶段：
+
+1. 调用 next(my_coro2)，打印第一个消息，然后执行 yield a，产出数字 14。
+
+2. 调用 my_coro2.send(28)，把 28 赋值给 b，打印第二个消息，然后执行 yield a + b，产出数字 42。
+
+3. 调用 my_coro2.send(99)，把 99 赋值给 c，打印第三个消息，协程终止。
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/yield.png)
+
+```py
+# 使用协程计算移动平均值
+def averager():
+    total = 0.0
+    count = 0
+    average = None
+    while True:
+        term = yield average
+        total += term
+        count += 1
+        average = total/count
+```
+
+预激活协程：
+
+```py
+from functools import wraps
+
+def coroutine(func):
+    """装饰器：向前执行到第一个`yield`表达式，预激`func`"""
+    @wraps(func)
+    def primer(*args,**kwargs):
+        gen = func(*args,**kwargs)
+        next(gen)
+        return gen
+    return primer
+```
+
+协程中未处理的异常会向上冒泡，传给 next 函数或 send 方法的调用方（即触发协程的对象）。
+
+```py
+class DemoException(Exception):
+    """为这次演示定义的异常类型。"""
+
+def demo_finally():
+    print('-> coroutine started')
+    try:
+        while True:
+            try:
+                x = yield
+            except DemoException:
+                print('*** DemoException handled. Continuing...')
+            else:
+                print('-> coroutine received: {!r}'.format(x))
+    finally:
+        print('-> coroutine ending')
+```
+
+
+![](https://raw.githubusercontent.com/inspiringz/leetcode/main/image/yield_from.png)
+
+```py
+from collections import namedtuple
+
+Result = namedtuple('Result', 'count average')
+
+# 子生成器
+def averager():
+    total = 0.0
+    count = 0
+    average = None
+    while True:
+        term = yield
+        if term is None: # 防止 yield from 协程调用堵塞
+            break
+        total += term
+        count += 1
+        average = total/count
+    return Result(count, average) # Result 成为 grouper 函数中 yield from 表达式的值
+
+# 委派生成器
+def grouper(results, key):
+    while True: # 每次迭代时会新建一个 averager 实例
+        results[key] = yield from averager() # 每个实例都是作为协程使用的生成器对象
+    # yield from x => for _x in x: yield _x
+
+# 客户端代码，即调用方
+def main(data):
+    results = {}
+    for key, values in data.items():
+        group = grouper(results, key)
+        next(group) # 预激 group 协程
+        for value in values:
+            group.send(value) # 把各个 value 传给 grouper。传入的值最终到达 averager 函数中 term = yield 那一行；grouper 永远不知道传入的值是什么。
+        group.send(None) # 重要！把 None 传入 grouper，导致当前的 averager 实例终止，也让 grouper 继续运行，再创建一个 averager 实例，处理下一组值
+
+    # print(results) # 如果要调试，去掉注释
+    report(results)
+
+# 输出报告
+def report(results):
+    for key, result in sorted(results.items()):
+        group, unit = key.split(';')
+        print('{:2} {:5} averaging {:.2f}{}'.format(result.count, group, result.average, unit))
+
+data = {
+    'girls;kg': [40.9, 38.5, 44.3, 42.2, 45.2, 41.7, 44.5, 38.0, 40.6, 44.5],
+    'girls;m': [1.6, 1.51, 1.4, 1.3, 1.41, 1.39, 1.33, 1.46, 1.45, 1.43],
+    'boys;kg': [39.0, 40.8, 43.2, 40.8, 43.1, 38.6, 41.4, 40.6, 36.3],
+    'boys;m': [1.38, 1.5, 1.32, 1.25, 1.37, 1.48, 1.25, 1.49, 1.46],
+}
+
+if __name__ == '__main__':
+    main(data)
+```
+
+```
+$ python3 coroaverager3.py
+ 9 boys averaging 40.42kg
+ 9 boys averaging 1.39m
+10 girls averaging 42.04kg
+10 girls averaging 1.43m
+```
+
+- 出租车队运营仿真
+
+在一个主循环中处理事件，通过发送数据驱动协程，使用生成器代替线程和回调，实现并发。
+
+**事件驱动型框架**（如 Tornado 和 asyncio）的运作方式：在单个线程中使用一个主循环驱动协程执行并发活动。使用协程做面向事件编程时，协程会不断把控制权让步给主循环，激活并向前运行其他协程，从而执行各个并发活动。这是一种协作式多任务：协程显式自主地把控制权让步给中央调度程序。而多线程实现的是抢占式多任务。调度程序可以在任何时刻暂停线程（即使在执行一个语句的过程中），把控制权让给其他线程。
+
+```py
+import random
+import collections
+import queue
+import argparse
+import time
+
+DEFAULT_NUMBER_OF_TAXIS = 3
+DEFAULT_END_TIME = 180
+SEARCH_DURATION = 5
+TRIP_DURATION = 20
+DEPARTURE_INTERVAL = 5
+
+Event = collections.namedtuple('Event', 'time proc action')
+
+
+# BEGIN TAXI_PROCESS
+def taxi_process(ident, trips, start_time=0):  # <1>
+    """Yield to simulator issuing event at each state change"""
+    time = yield Event(start_time, ident, 'leave garage')  # <2>
+    for i in range(trips):  # <3>
+        time = yield Event(time, ident, 'pick up passenger')  # <4>
+        time = yield Event(time, ident, 'drop off passenger')  # <5>
+
+    yield Event(time, ident, 'going home')  # <6>
+    # end of taxi process # <7>
+# END TAXI_PROCESS
+
+
+# BEGIN TAXI_SIMULATOR
+class Simulator:
+
+    def __init__(self, procs_map):
+        self.events = queue.PriorityQueue()
+        self.procs = dict(procs_map)
+
+    def run(self, end_time, delay=False):  # <1>
+        """Schedule and display events until time is up"""
+        # schedule the first event for each cab
+        for _, proc in sorted(self.procs.items()):  # <2>
+            first_event = next(proc)  # <3>
+            self.events.put(first_event)  # <4>
+
+        # main loop of the simulation
+        sim_time = 0  # <5>
+        while sim_time < end_time:  # <6>
+            if self.events.empty():  # <7>
+                print('*** end of events ***')
+                break
+
+            # get and display current event
+            current_event = self.events.get()  # <8>
+            if delay:
+                time.sleep((current_event.time - sim_time) / 2)
+            # update the simulation time
+            sim_time, proc_id, previous_action = current_event
+            print('taxi:', proc_id, proc_id * '   ', current_event)
+            active_proc = self.procs[proc_id]
+            # schedule next action for current proc
+            next_time = sim_time + compute_duration(previous_action)
+            try:
+                next_event = active_proc.send(next_time)  # <12>
+            except StopIteration:
+                del self.procs[proc_id]  # <13>
+            else:
+                self.events.put(next_event)  # <14>
+        else:  # <15>
+            msg = '*** end of simulation time: {} events pending ***'
+            print(msg.format(self.events.qsize()))
+# END TAXI_SIMULATOR
+
+
+def compute_duration(previous_action):
+    """Compute action duration using exponential distribution"""
+    if previous_action in ['leave garage', 'drop off passenger']:
+        # new state is prowling
+        interval = SEARCH_DURATION
+    elif previous_action == 'pick up passenger':
+        # new state is trip
+        interval = TRIP_DURATION
+    elif previous_action == 'going home':
+        interval = 1
+    else:
+        raise ValueError('Unknown previous_action: %s' % previous_action)
+    return int(random.expovariate(1/interval)) + 1
+
+
+def main(end_time=DEFAULT_END_TIME, num_taxis=DEFAULT_NUMBER_OF_TAXIS,
+         seed=None, delay=False):
+    """Initialize random generator, build procs and run simulation"""
+    if seed is not None:
+        random.seed(seed)  # get reproducible results
+
+    taxis = {i: taxi_process(i, (i+1)*2, i*DEPARTURE_INTERVAL)
+             for i in range(num_taxis)}
+    sim = Simulator(taxis)
+    sim.run(end_time, delay)
+
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(
+                        description='Taxi fleet simulator.')
+    parser.add_argument('-e', '--end-time', type=int,
+                        default=DEFAULT_END_TIME,
+                        help='simulation end time; default = %s'
+                        % DEFAULT_END_TIME)
+    parser.add_argument('-t', '--taxis', type=int,
+                        default=DEFAULT_NUMBER_OF_TAXIS,
+                        help='number of taxis running; default = %s'
+                        % DEFAULT_NUMBER_OF_TAXIS)
+    parser.add_argument('-s', '--seed', type=int, default=None,
+                        help='random generator seed (for testing)')
+    parser.add_argument('-d', '--delay', action='store_true',
+                        help='introduce delay proportional to simulation time')
+
+    args = parser.parse_args()
+    main(args.end_time, args.taxis, args.seed, args.delay)
+```
+
+## 17 使用期物处理并发
 
