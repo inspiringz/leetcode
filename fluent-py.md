@@ -2620,7 +2620,7 @@ isinstance(x, numbers.Real) # 判断浮点数 bool、int、float、fractions.Fra
 
 ### 14.1 迭代器 & 生成器
 
-**序列可以迭代的原因：`iter` 函数。**解释器需要迭代对象 x 时，会自动调用 iter(x)。内置的 iter 函数有以下作用：
+**序列可以迭代的原因：`iter` 函数。** 解释器需要迭代对象 x 时，会自动调用 iter(x)。内置的 iter 函数有以下作用：
 
 1. 检查对象是否实现了 `__iter__` 方法，如果实现了就调用它，获取一个迭代器。
 
@@ -2947,4 +2947,77 @@ with open('mydata.txt') as fp:
 ```
 
 ## 15 上下文管理器和 else 块
+
+### 15.1 if 语句之外的 else 块
+
+else 子句不仅能在 if 语句中使用，还能在 for、while 和 try 语句中使用。
+
+else 子句的行为如下。
+
+- `for` 仅当 for 循环运行完毕时（即 for 循环没有被 break 语句中止）才运行 else 块。
+
+- `while` 仅当 while 循环因为条件为假值而退出时（即 while 循环没有被 break 语句中止）才运行 else 块。
+
+- `try` 仅当 try 块中没有异常抛出时才运行 else 块。[官方文档](https://docs.python.org/3/reference/compound_stmts.html)还指出：“else 子句抛出的异常不会由前面的 except 子句处理。”
+
+```py
+for item in my_list:
+    if item.flavor == 'banana':
+        break
+else:
+    raise ValueError('No banana flavor found!')
+```
+
+```py
+try:
+    dangerous_call()
+except OSError:
+    log('OSError...')
+else:
+    after_call()
+```
+
+### 15.2 上下文管理器和 with 块
+
+上下文管理器对象存在的目的是管理 with 语句，就像迭代器的存在是为了管理 for 语句一样。
+
+with 语句会设置一个临时的上下文，交给上下文管理器对象控制，并且负责清理上下文。这么做能避免错误并减少样板代码，因此 API 更安全，而且更易于使用。
+
+with 语句的目的是简化 try/finally 模式。这种模式用于保证一段代码运行完毕后执行某项操作，即便那段代码由于异常、return 语句或 sys.exit() 调用而中止，也会执行指定的操作。finally 子句中的代码通常用于释放重要的资源，或者还原临时变更的状态。
+
+上下文管理器协议包含 `__enter__` 和 `__exit__` 两个方法。with 语句开始运行时，会在上下文管理器对象上调用 `__enter__` 方法。with 语句运行结束后，会在上下文管理器对象上调用 `__exit__` 方法，以此扮演 finally 子句的角色。
+
+`@contextmanager` 装饰器能减少创建上下文管理器的样板代码量，因为不用编写一个完整的类，定义 `__enter__` 和 `__exit__` 方法，而只需实现有一个 yield 语句的生成器，生成想让 `__enter__` 方法返回的值。
+
+在使用 @contextmanager 装饰的生成器中，yield 语句的作用是把函数的定义体分成两部分：yield 语句前面的所有代码在 with 块开始时（即解释器调用 `__enter__` 方法时）执行， yield 语句后面的代码在 with 块结束时（即调用 `__exit__` 方法时）执行。
+
+```py
+import contextlib
+
+@contextlib.contextmanager
+def looking_glass():
+    import sys
+    original_write = sys.stdout.write
+    def reverse_write(text):
+        original_write(text[::-1])
+    sys.stdout.write = reverse_write
+    yield 'JABBERWOCKY'
+    sys.stdout.write = original_write
+```
+
+```py
+>>> from mirror_gen import looking_glass
+>>> with looking_glass() as what:
+... print('Alice, Kitty and Snowdrop')
+... print(what)
+...
+pordwonS dna yttiK ,ecilA
+YKCOWREBBAJ
+>>> what
+'JABBERWOCKY
+```
+
+## 16 协程
+
+
 
