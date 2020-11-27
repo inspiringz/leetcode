@@ -3307,3 +3307,65 @@ if __name__ == '__main__':
 
 ## 17 使用期物处理并发
 
+`concurrent.futures` 模块的主要特色是 ThreadPoolExecutor 和 ProcessPoolExecutor 类，这两个类实现的接口能分别在不同的线程或进程中执行可调用的对象。这两个类在内部维护着一个工作线程或进程池，以及要执行的任务队列。
+
+```py
+def download_many(cc_list):
+    workers = min(MAX_WORKERS, len(cc_list)) # 设定工作的线程数量
+    with futures.ThreadPoolExecutor(workers) as executor: # 使用工作的线程数实例化 ThreadPoolExecutor 类
+        res = executor.map(download_one, sorted(cc_list)) # map 方法返回一个生成器，因此可以迭代，获取各个函数返回的值
+    return len(list(res)) # 返回获取的结果数量；如果有线程抛出异常，异常会在这里抛出，这与隐式调用 next() 函数从迭代器中获取相应的返回值一样
+```
+
+**期物**封装待完成的操作，可以放入队列，完成的状态可以查询，得到结果（或抛出异常）后可以获取结果（或异常）。
+
+CPython 解释器本身就不是线程安全的，因此有`全局解释器锁`（GIL, Global Interpreter Lock），一次只允许使用一个线程执行 Python 字节码。因此，一个 Python 进程通常不能同时使用多个 CPU 核心。Python 标准库中的所有阻塞型 I/O 函数都会释放 GIL，允许其他线程运行。time.sleep() 函数也会释放 GIL。因此，尽管有 GIL，Python 线程还是能在 I/O 密集型应用中发挥作用。
+
+[concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html) 模块实现了真正的并行运算，通过 ProcessPoolExecutor 类把工作分配给多个 Python 进程处理。因此，如果需要做 CPU 密集型处理，使用这个模块能绕开 GIL，利用所有可用的 CPU 核心。
+
+Executor.map 函数易于使用，返回结果的顺序与开始调用的顺序一致，如果第一个调用生成结果用时 10 秒，而其他调用只用 1 秒，代码会阻塞 10 秒，获取 map 方法返回的生成器产出的第一个结果。
+
+`executor.submit` 和 `futures.as_completed` 这个组合比 executor.map 更灵活，因为 submit 方法能处理不同的可调用对象和参数，而 executor.map 只能处理参数不同的同一个可调用对象。此外，传给 futures.as_completed 函数的期物集合可以来自多个 Executor 实例，例如一些由 ThreadPoolExecutor 实例创建，另一些由 ProcessPoolExecutor 实例创建。
+
+```py
+def download_many(cc_list, base_url, verbose, concur_req):
+    counter = collections.Counter()
+    with futures.ThreadPoolExecutor(max_workers=concur_req) as executor:  # max_workers = min(len(cc_list), concur_req, MAX_CONCUR_REQ)
+        to_do_map = {}  # Future => 国家代码
+        for cc in sorted(cc_list):  # 按字母顺序迭代国家代码列表
+            future = executor.submit(download_one,
+                            cc, base_url, verbose)  # 排定可调用对象的执行时间，返回 Future 实例
+            to_do_map[future] = cc  # future => 国家代码
+        done_iter = futures.as_completed(to_do_map)  # 返回一个迭代器，在期物运行结束后产出期物。
+        if not verbose:
+            done_iter = tqdm.tqdm(done_iter, total=len(cc_list))  # 非详尽模式显示进度条，done_iter 无 len 函数指定 total 参数
+        for future in done_iter:  # 迭代运行结束后的期物
+            try:
+                res = future.result() # 获取返回值
+            except requests.exceptions.HTTPError as exc:  # 处理可能出现的异常
+                error_msg = 'HTTP {res.status_code} - {res.reason}'
+                error_msg = error_msg.format(res=exc.response)
+            except requests.exceptions.ConnectionError as exc:
+                error_msg = 'Connection error'
+            else:
+                error_msg = ''
+                status = res.status
+
+            if error_msg:
+                status = HTTPStatus.error
+            counter[status] += 1
+            if verbose and error_msg:
+                cc = to_do_map[future]  # <16>
+                print('*** Error for {}: {}'.format(cc, error_msg))
+
+    return counter
+```
+
+把期物存储在一个字典中，提交期物时把期物与相关的信息联系起来；这样，as_completed 迭代器产出期物后，就可以使用那些信息。
+
+对 CPU 密集型工作来说，要启动多个进程，规避 GIL。创建多个进程最简单的方式是，使用 futures.ProcessPoolExecutor 类。不过和前面一样，如果使用场景较复杂，需要更高级的工具。[multiprocessing 模块](https://docs.python.org/3/library/multiprocessing.html) 的 API 与 threading 模块相仿，不过作业交给多个进程处理。对简单的程序来说，可以用 multiprocessing 模块代替 threading 模块，少量改动即可。不过 multiprocessing 模块还能解决协作进程遇到的最大挑战：在进程之间传递数据。
+
+
+
+
+
