@@ -3365,7 +3365,136 @@ def download_many(cc_list, base_url, verbose, concur_req):
 
 对 CPU 密集型工作来说，要启动多个进程，规避 GIL。创建多个进程最简单的方式是，使用 futures.ProcessPoolExecutor 类。不过和前面一样，如果使用场景较复杂，需要更高级的工具。[multiprocessing 模块](https://docs.python.org/3/library/multiprocessing.html) 的 API 与 threading 模块相仿，不过作业交给多个进程处理。对简单的程序来说，可以用 multiprocessing 模块代替 threading 模块，少量改动即可。不过 multiprocessing 模块还能解决协作进程遇到的最大挑战：在进程之间传递数据。
 
+## 18 使用 asyncio 包处理并发
 
+并发是指一次处理多件事。并行是指一次做多件事。一个关于结构，一个关于执行。并发用于制定方案，用来解决可能（但未必）并行的问题。
+
+asyncio 包，使用事件循环驱动的协程实现并发。使用协程解决回调的主要问题：执行分成多步的异步任务时丢失上下文，以及缺少处理错误所需的上下文。
+
+异步库依赖于低层线程（直至内核级线程），但是这些库的用户无需创建线程，也无需知道用到了基础设施中的低层线程。在应用中，我们只需确保没有阻塞的代码，事件循环会在背后处理并发。异步系统能避免用户级线程的开销，这是它能比多线程系统管理更多并发连接的主要原因。
+
+```py
+import asyncio
+import collections
+
+import aiohttp
+from aiohttp import web
+import tqdm
+
+from flags2_common import main, HTTPStatus, Result, save_flag
+
+# default set low to avoid errors from remote site, such as
+# 503 - Service Temporarily Unavailable
+DEFAULT_CONCUR_REQ = 5
+MAX_CONCUR_REQ = 1000
+
+
+class FetchError(Exception):
+    def __init__(self, country_code):
+        self.country_code = country_code
+
+# BEGIN FLAGS3_ASYNCIO
+@asyncio.coroutine
+def http_get(url):
+    res = yield from aiohttp.request('GET', url)
+    if res.status == 200:
+        ctype = res.headers.get('Content-type', '').lower()
+        if 'json' in ctype or url.endswith('json'):
+            data = yield from res.json()  # <1>
+        else:
+            data = yield from res.read()  # <2>
+        return data
+
+    elif res.status == 404:
+        raise web.HTTPNotFound()
+    else:
+        raise aiohttp.errors.HttpProcessingError(
+            code=res.status, message=res.reason,
+            headers=res.headers)
+
+
+@asyncio.coroutine
+def get_country(base_url, cc):
+    url = '{}/{cc}/metadata.json'.format(base_url, cc=cc.lower())
+    metadata = yield from http_get(url)  # <3>
+    return metadata['country']
+
+
+@asyncio.coroutine
+def get_flag(base_url, cc):
+    url = '{}/{cc}/{cc}.gif'.format(base_url, cc=cc.lower())
+    return (yield from http_get(url)) # <4>
+
+
+@asyncio.coroutine
+def download_one(cc, base_url, semaphore, verbose):
+    try:
+        with (yield from semaphore): # <5>
+            image = yield from get_flag(base_url, cc)
+        with (yield from semaphore):
+            country = yield from get_country(base_url, cc)
+    except web.HTTPNotFound:
+        status = HTTPStatus.not_found
+        msg = 'not found'
+    except Exception as exc:
+        raise FetchError(cc) from exc
+    else:
+        country = country.replace(' ', '_')
+        filename = '{}-{}.gif'.format(country, cc)
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, save_flag, image, filename) # 把阻塞的作业委托给线程池做
+        status = HTTPStatus.ok
+        msg = 'OK'
+
+    if verbose and msg:
+        print(cc, msg)
+
+    return Result(status, cc)
+# END FLAGS3_ASYNCIO
+
+@asyncio.coroutine
+def downloader_coro(cc_list, base_url, verbose, concur_req):
+    counter = collections.Counter()
+    semaphore = asyncio.Semaphore(concur_req)
+    to_do = [download_one(cc, base_url, semaphore, verbose)
+             for cc in sorted(cc_list)]
+
+    to_do_iter = asyncio.as_completed(to_do) # 获取一个迭代器，这个迭代器会在期物运行结束后返回期物
+    if not verbose:
+        to_do_iter = tqdm.tqdm(to_do_iter, total=len(cc_list))
+    for future in to_do_iter:
+        try:
+            res = yield from future
+        except FetchError as exc:
+            country_code = exc.country_code
+            try:
+                error_msg = exc.__cause__.args[0]
+            except IndexError:
+                error_msg = exc.__cause__.__class__.__name__
+            if verbose and error_msg:
+                msg = '*** Error for {}: {}'
+                print(msg.format(country_code, error_msg))
+            status = HTTPStatus.error
+        else:
+            status = res.status
+
+        counter[status] += 1
+
+    return counter
+
+
+def download_many(cc_list, base_url, verbose, concur_req):
+    loop = asyncio.get_event_loop()
+    coro = downloader_coro(cc_list, base_url, verbose, concur_req) # 实例化 downloader_coro 协程
+    counts = loop.run_until_complete(coro)
+    loop.close()
+
+    return counts
+
+
+if __name__ == '__main__':
+    main(download_many, DEFAULT_CONCUR_REQ, MAX_CONCUR_REQ)
+```
 
 
 
